@@ -5,7 +5,7 @@ export const doLinkPasswordToGoogleAccount = async (user, password) => {
     return linkWithCredential(user, credential);
 };
 import { auth } from "../firebase/firebase";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect, sendPasswordResetEmail, updatePassword, sendEmailVerification, getRedirectResult } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, updatePassword, sendEmailVerification, getAdditionalUserInfo } from 'firebase/auth';
 
 export const doCreateUserWithEmailAndPassword = async(email, password) => {
     return createUserWithEmailAndPassword(auth, email, password);
@@ -15,19 +15,14 @@ export const doSignInWithEmailAndPassword = (email, password) => {
 };
 export const doSignInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
-        // Start the sign-in process
-        await signInWithRedirect(auth, provider);
-
-        // Handle the redirect result
-        const result = await getRedirectResult(auth);
-        if (result) {
-            const user = result.user;
-            console.log('Google sign-in successful:', user.displayName, user.email);
-            return user;
-        } else {
-            console.log('No redirect result available.');
-        }
+        const result = await signInWithPopup(auth, provider);
+        const user = result.user;
+        const info = getAdditionalUserInfo(result);
+        const isNewUser = !!(info && info.isNewUser);
+        console.log('Google sign-in successful:', user.displayName, user.email, 'isNewUser:', isNewUser);
+        return { user, isNewUser };
     } catch (error) {
         console.error('Error during Google sign-in:', error.code, error.message, error.customData);
         throw error;

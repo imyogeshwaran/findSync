@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { doSignInWithEmailAndPassword, doSignInWithGoogle } from '../firebase/auth';
 import { auth } from '../firebase/firebase';
@@ -36,24 +35,27 @@ function SigninForm({ onShowSignup }) {
 
   const handleGoogleLogin = async () => {
     try {
-      await doSignInWithGoogle();
-      // The redirect will handle the rest; logging will be handled after redirect
+      const result = await doSignInWithGoogle();
+      const user = result?.user || result;
+      if (user) {
+        await logAuthEvent('login', user);
+        setSuccessMsg('Google login successful!');
+      }
     } catch (error) {
       alert(error.message);
       console.error(error);
     }
   };
 
-  // Log Google login after redirect
-  React.useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (user) => {
-      if (user && user.providerData.some(p => p.providerId === 'google.com')) {
-        // Check if this login event is already logged (optional: avoid duplicates)
-        await logAuthEvent('login', user);
-      }
-    });
-    return () => unsub();
-  }, []);
+  // Removed redirect-based logging to avoid duplicate logs when using popup
+  // React.useEffect(() => {
+  //   const unsub = auth.onAuthStateChanged(async (user) => {
+  //     if (user && user.providerData.some(p => p.providerId === 'google.com')) {
+  //       await logAuthEvent('login', user);
+  //     }
+  //   });
+  //   return () => unsub();
+  // }, []);
 
   const handleChange = (e) => {
     setFormData({
