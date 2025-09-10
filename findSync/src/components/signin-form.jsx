@@ -15,10 +15,15 @@ async function logAuthEvent(type, user) {
   });
 }
 
-function SigninForm({ onShowSignup }) {
+function SigninForm({ onShowSignup, onAuthSuccess }) {
   const [formData, setFormData] = React.useState({ email: '', password: '' });
   const [successMsg, setSuccessMsg] = React.useState('');
 
+  React.useEffect(() => {
+    if (!successMsg) return;
+    const t = setTimeout(() => setSuccessMsg(''), 2500);
+    return () => clearTimeout(t);
+  }, [successMsg]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,6 +31,7 @@ function SigninForm({ onShowSignup }) {
       const result = await doSignInWithEmailAndPassword(formData.email, formData.password);
       await logAuthEvent('login', result.user);
       setSuccessMsg('Login successful!');
+      if (onAuthSuccess) onAuthSuccess(result.user);
       // Redirect or update UI as needed
     } catch (error) {
       alert(error.message);
@@ -40,6 +46,7 @@ function SigninForm({ onShowSignup }) {
       if (user) {
         await logAuthEvent('login', user);
         setSuccessMsg('Google login successful!');
+        if (onAuthSuccess) onAuthSuccess(user);
       }
     } catch (error) {
       alert(error.message);
@@ -66,6 +73,7 @@ function SigninForm({ onShowSignup }) {
 
   return (
     <div style={{
+      position: 'relative',
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
       backdropFilter: 'blur(10px)',
       padding: '2.5rem',
@@ -73,13 +81,58 @@ function SigninForm({ onShowSignup }) {
       boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
       border: '1px solid rgba(255, 255, 255, 0.2)',
       width: '400px',
-      color: 'white',
-      position: 'relative'
+      color: 'white'
     }}>
       {successMsg && (
-        <div style={{ background: '#22c55e', color: 'white', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', textAlign: 'center', position: 'relative' }}>
-          {successMsg}
-          <button onClick={() => setSuccessMsg('')} style={{ position: 'absolute', right: 10, top: 5, background: 'none', border: 'none', color: 'white', fontWeight: 'bold', fontSize: '1.2rem', cursor: 'pointer' }}>&times;</button>
+        <div
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: 0,
+            transform: 'translate(-50%, -120%)',
+            zIndex: 10,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: '0.85rem 1rem',
+            borderRadius: '12px',
+            background: 'rgba(34, 197, 94, 0.12)',
+            border: '1px solid rgba(34, 197, 94, 0.35)',
+            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.25)',
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            color: '#d1fae5',
+            fontWeight: 600,
+            letterSpacing: '0.2px'
+          }}
+        >
+          <span style={{
+            display: 'inline-flex',
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(34, 197, 94, 0.25)',
+            border: '1px solid rgba(34, 197, 94, 0.4)',
+            color: '#86efac'
+          }}>✓</span>
+          <span>{successMsg}</span>
+          <button
+            onClick={() => setSuccessMsg('')}
+            aria-label="Close"
+            style={{
+              marginLeft: '0.5rem',
+              background: 'transparent',
+              border: 'none',
+              color: '#a7f3d0',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              lineHeight: 1
+            }}
+          >
+            ×
+          </button>
         </div>
       )}
       <div style={{ marginBottom: '1.5rem' }}>
