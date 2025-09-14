@@ -1,5 +1,8 @@
-.prism-container {
+.threads-container {
   position: relative;
   width: 100%;
   height: 100%;
+  /* Ensure non-zero dimensions at all times to avoid WebGL 0x0 buffers */
+  min-width: 1px;
+  min-height: 1px;
 }
