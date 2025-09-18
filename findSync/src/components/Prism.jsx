@@ -160,9 +160,10 @@ const Threads = ({ color = [1, 1, 1], amplitude = 1, distance = 0, enableMouseIn
       const w = Math.max(1, clientWidth || 0);
       const h = Math.max(1, clientHeight || 0);
       renderer.setSize(w, h);
-      program.uniforms.iResolution.value.r = clientWidth;
-      program.uniforms.iResolution.value.g = clientHeight;
-      program.uniforms.iResolution.value.b = clientWidth / clientHeight;
+      // Use clamped non-zero values for uniforms as well
+      program.uniforms.iResolution.value.r = w;
+      program.uniforms.iResolution.value.g = h;
+      program.uniforms.iResolution.value.b = w / h;
     }
     window.addEventListener('resize', resize);
     resize();
@@ -185,8 +186,9 @@ const Threads = ({ color = [1, 1, 1], amplitude = 1, distance = 0, enableMouseIn
     }
 
     function update(t) {
-      // Skip frame if drawing buffer is zero during layout
+      // Skip frame if drawing buffer is zero during layout, but try to recover by resizing
       if (gl.drawingBufferWidth === 0 || gl.drawingBufferHeight === 0) {
+        resize();
         animationFrameId.current = requestAnimationFrame(update);
         return;
       }
