@@ -1,7 +1,578 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
+import { auth } from '../firebase/firebase.js';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken } from '../services/api.js';
 
-function Navbar({ onNavigate = () => {} }) {
+// Modal component for adding a missing item
+function AddItemModal({ isOpen, onClose, onSubmit }) {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    location: '',
+    mobile: '',
+    image: null,
+    preview: null
+  });
+  const fileInputRef = useRef(null);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({
+          ...prev,
+          image: file,
+          preview: reader.result
+        }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+    // Reset form
+    setFormData({
+      name: '',
+      description: '',
+      location: '',
+      mobile: '',
+      image: null,
+      preview: null
+    });
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      backdropFilter: 'blur(5px)',
+    }} onClick={onClose}>
+      <div style={{
+        backgroundColor: 'transparent',
+        padding: '24px',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '500px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        overflowX: 'hidden',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Report Missing Item</h2>
+          <button 
+            onClick={onClose}
+            style={{
+              background: 'none',
+              backgroundColor: 'transparent',
+              border: 'none',
+              outline: 'none',
+              boxShadow: 'none',
+              color: '#fff',
+              fontSize: '3rem',
+              cursor: 'pointer',
+              opacity: 0.9,
+              lineHeight: 1,
+              padding: 0,
+              margin: 0,
+              width: '48px',
+              height: '48px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'opacity 0.2s ease, transform 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '1';
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '0.9';
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+          >
+            &times;
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Item Name
+            </label>
+            <input
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+              }}
+              placeholder="Enter item name"
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Description
+            </label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              required
+              rows="4"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                resize: 'vertical',
+                minHeight: '100px',
+                outline: 'none',
+              }}
+              placeholder="Describe the item in detail (color, brand, unique features)"
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Location Where Lost
+            </label>
+            <input
+              type="text"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+              }}
+              placeholder="Where did you last see this item?"
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Mobile Number
+            </label>
+            <input
+              type="tel"
+              name="mobile"
+              value={formData.mobile}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+              }}
+              placeholder="Your contact number"
+            />
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Upload Image
+            </label>
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              onChange={handleImageChange}
+              style={{ display: 'none' }}
+            />
+            <div 
+              onClick={() => fileInputRef.current.click()}
+              style={{
+                border: '2px dashed rgba(255,255,255,0.2)',
+                borderRadius: '10px',
+                padding: '20px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                background: formData.preview ? `url(${formData.preview}) center/cover` : 'rgba(0,0,0,0.2)',
+                height: formData.preview ? '200px' : 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              {!formData.preview && (
+                <>
+                  <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📷</div>
+                  <div>Click to upload an image</div>
+                  <div style={{ fontSize: '0.8rem', opacity: 0.7, marginTop: '4px' }}>JPG, PNG (max 5MB)</div>
+                </>
+              )}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            style={{
+              width: '100%',
+              padding: '14px',
+              borderRadius: '10px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+              color: 'white',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+          >
+            Submit Report
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Authentication Modal Component
+function AuthModal({ isOpen, onClose, onAuthSuccess }) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: ''
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setError('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      let firebaseUser;
+      
+      if (isLogin) {
+        // Sign in existing user
+        const userCredential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+        firebaseUser = userCredential.user;
+      } else {
+        // Create new user
+        const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+        // Update profile with display name
+        await updateProfile(userCredential.user, {
+          displayName: formData.name
+        });
+        firebaseUser = userCredential.user;
+      }
+      
+      // Sync user to MySQL backend
+      try {
+        await syncUserToBackend(firebaseUser);
+        console.log('✅ User synced to backend successfully');
+      } catch (syncError) {
+        console.error('Failed to sync user to backend:', syncError);
+        // Continue even if backend sync fails
+      }
+      
+      onAuthSuccess();
+      onClose();
+      setFormData({ name: '', email: '', password: '' });
+    } catch (err) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      backdropFilter: 'blur(5px)',
+    }} onClick={onClose}>
+      <div style={{
+        backgroundColor: '#1a1a1a',
+        padding: '32px',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '420px',
+        boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+        border: '1px solid rgba(255,255,255,0.1)',
+      }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 700 }}>
+            {isLogin ? 'Welcome Back' : 'Create Account'}
+          </h2>
+          <button 
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              fontSize: '1.5rem',
+              cursor: 'pointer',
+              opacity: 0.7,
+            }}
+          >
+            &times;
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit}>
+          {!isLogin && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: 500,
+                fontSize: '0.9rem',
+                opacity: 0.9
+              }}>
+                Full Name
+              </label>
+              <input
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  outline: 'none',
+                }}
+                placeholder="Enter your full name"
+              />
+            </div>
+          )}
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Email
+            </label>
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+              }}
+              placeholder="Enter your email"
+            />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Password
+            </label>
+            <input
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              required
+              minLength="6"
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+              }}
+              placeholder="Enter your password"
+            />
+          </div>
+
+          {error && (
+            <div style={{
+              padding: '12px',
+              borderRadius: '8px',
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              color: '#fca5a5',
+              fontSize: '0.9rem',
+              marginBottom: '16px'
+            }}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '14px',
+              borderRadius: '10px',
+              border: 'none',
+              background: loading ? 'rgba(79,70,229,0.5)' : 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+              color: 'white',
+              fontSize: '1rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Sign Up')}
+          </button>
+        </form>
+
+        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '0.9rem', opacity: 0.8 }}>
+          {isLogin ? "Don't have an account? " : "Already have an account? "}
+          <button
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError('');
+              setFormData({ name: '', email: '', password: '' });
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#a855f7',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: '0.9rem',
+              textDecoration: 'underline'
+            }}
+          >
+            {isLogin ? 'Sign Up' : 'Sign In'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -46,29 +617,38 @@ function Navbar({ onNavigate = () => {} }) {
         <ul style={{ listStyle: 'none', display: 'flex', gap: '20px', margin: 0, padding: 0, alignItems: 'center' }}>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); }}>Home</a></li>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); }}>Explore</a></li>
-          <li><a href="#" style={linkStyle}>Find</a></li>
-          <li style={{ position: 'relative' }}
-              onMouseEnter={() => setAccountOpen(true)}
-              onMouseLeave={() => setAccountOpen(false)}>
-            <a href="#" style={linkStyle}>Account ▾</a>
-            {accountOpen && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                minWidth: 180,
-                background: 'rgba(0,0,0,0.6)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: 10,
-                padding: 8,
-                backdropFilter: 'blur(4px)'
-              }}>
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
-                  <li>
-                    <a href="#" style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
-                  </li>
-                </ul>
-              </div>
-            )}
-          </li>
+          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('find'); }}>Find</a></li>
+          {user ? (
+            <li style={{ position: 'relative' }}
+                onMouseEnter={() => setAccountOpen(true)}
+                onMouseLeave={() => setAccountOpen(false)}>
+              <a href="#" style={linkStyle}>{user.displayName || 'Account'} ▾</a>
+              {accountOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                  minWidth: 180,
+                  background: 'rgba(0,0,0,0.6)',
+                  border: '1px solid rgba(255,255,255,0.12)',
+                  borderRadius: 10,
+                  padding: 8,
+                  backdropFilter: 'blur(4px)'
+                }}>
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+                    <li>
+                      <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
+                    </li>
+                    <li>
+                      <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8, color: '#f87171' }}>Logout</a>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </li>
+          ) : (
+            <li>
+              <button onClick={onAuthClick} style={btnPrimary}>Sign In</button>
+            </li>
+          )}
         </ul>
       </nav>
 
@@ -109,15 +689,22 @@ function Navbar({ onNavigate = () => {} }) {
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); setMobileOpen(false); }}>Home</a>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); setMobileOpen(false); }}>Explore</a>
-            <a href="#" style={linkStyle}>Find</a>
-            <details>
-              <summary style={{ cursor: 'pointer' }}>Account</summary>
-              <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 8 }}>
-                <li>
-                  <a href="#" style={{ ...linkStyle, display: 'block' }}>My Profile</a>
-                </li>
-              </ul>
-            </details>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('find'); setMobileOpen(false); }}>Find</a>
+            {user ? (
+              <details>
+                <summary style={{ cursor: 'pointer' }}>{user.displayName || 'Account'}</summary>
+                <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 8 }}>
+                  <li>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block' }}>My Profile</a>
+                  </li>
+                  <li>
+                    <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block', color: '#f87171' }}>Logout</a>
+                  </li>
+                </ul>
+              </details>
+            ) : (
+              <button onClick={() => { onAuthClick(); setMobileOpen(false); }} style={{ ...btnPrimary, width: '100%' }}>Sign In</button>
+            )}
           </div>
         </div>
       )}
@@ -136,11 +723,8 @@ function Navbar({ onNavigate = () => {} }) {
 }
 
 // Inline Explore section with images, finder, description, and "near me" filtering
-function ExploreSection() {
+function ExploreSection({ userItems = [] }) {
   const [query, setQuery] = useState('');
-  const [locationFilter, setLocationFilter] = useState('All');
-  const [userLoc, setUserLoc] = useState(null); // { lat, lon }
-  const [nearMe, setNearMe] = useState(false);
   const [modalItem, setModalItem] = useState(null);
 
   // Sample data with geo coords (approximate)
@@ -163,46 +747,31 @@ function ExploreSection() {
     return R * c;
   }
 
-  const filtered = items.filter((it) => {
-    const q = query.trim().toLowerCase();
-    const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.description.toLowerCase().includes(q) || it.location.toLowerCase().includes(q) || it.finder.toLowerCase().includes(q);
-    const matchesLoc = locationFilter === 'All' || it.location === locationFilter;
-    let matchesNear = true;
-    if (nearMe && userLoc) {
-      const dist = haversine(userLoc.lat, userLoc.lon, it.lat, it.lon);
-      matchesNear = dist <= 50; // within 50km
-    }
-    return matchesQuery && matchesLoc && matchesNear;
-  }).map(it => {
-    let distanceKm = null;
-    if (userLoc) {
-      distanceKm = Math.round(haversine(userLoc.lat, userLoc.lon, it.lat, it.lon));
-    }
-    return { ...it, distanceKm };
-  });
+  // Combine sample items with user-submitted items
+  const allItems = [...items, ...userItems];
 
-  function requestLocation() {
-    if (!navigator.geolocation) return alert('Geolocation is not supported on this browser.');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-      },
-      (err) => {
-        console.error(err);
-        alert('Unable to fetch your location. Please allow location access.');
-      },
-      { enableHighAccuracy: true, timeout: 8000 }
+  const filtered = allItems.filter((it) => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (
+      it.title.toLowerCase().includes(q) ||
+      it.description.toLowerCase().includes(q) ||
+      it.location.toLowerCase().includes(q) ||
+      (it.finder && it.finder.toLowerCase().includes(q)) ||
+      (it.ownerName && it.ownerName.toLowerCase().includes(q))
     );
-  }
+  }).map(it => ({
+    ...it,
+    distanceKm: null // Keep the property but always set to null
+  }));
 
   return (
-    <section style={{ marginTop: 8 }}>
+    <section style={{ marginTop: 8, paddingBottom: '80px' }}>
       <div
         style={{
-          background: 'linear-gradient(135deg, #22c55e 0%, #06b6d4 50%, #6366f1 100%)',
+          background: 'transparent',
           borderRadius: 16,
           padding: '20px 20px',
-          boxShadow: '0 10px 28px rgba(0,0,0,0.28)',
           marginBottom: 14,
           transition: 'transform 400ms ease, box-shadow 400ms ease',
         }}
@@ -212,12 +781,9 @@ function ExploreSection() {
         <p style={{ marginTop: 6, opacity: 0.95 }}>See items reported by people around you</p>
       </div>
 
-      {/* Controls */}
+      {/* Search Bar */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 170px 150px',
-          gap: 10,
           background: 'rgba(255,255,255,0.08)',
           border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: 14,
@@ -228,68 +794,30 @@ function ExploreSection() {
           marginBottom: 16,
         }}
       >
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by title, description, location or finder"
-          style={{
-            width: '100%',
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(0,0,0,0.35)',
-            color: '#fff',
-            outline: 'none',
-          }}
-        />
-        <select
-          value={locationFilter}
-          onChange={(e) => setLocationFilter(e.target.value)}
-          style={{
-            width: '100%',
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(0,0,0,0.35)',
-            color: '#fff',
-            outline: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          {uniqueLocations.map(loc => (
-            <option key={loc}>{loc}</option>
-          ))}
-        </select>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setNearMe(v => !v)}
+        <div style={{ position: 'relative' }}>
+          <input
+            value={query || ''}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by title, description, or location"
             style={{
-              flex: 1,
-              padding: '10px 12px',
+              width: '100%',
+              padding: '12px 16px 12px 44px',
               borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.22)',
-              background: nearMe ? 'rgba(34,197,94,0.22)' : 'rgba(0,0,0,0.35)',
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: 'rgba(0,0,0,0.35)',
               color: '#fff',
-              cursor: 'pointer',
-              transition: 'filter 200ms ease',
+              outline: 'none',
+              fontSize: '0.95rem',
             }}
-          >
-            📍 Near me {nearMe ? 'On' : 'Off'}
-          </button>
-          <button
-            onClick={requestLocation}
-            style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.22)',
-              background: 'linear-gradient(135deg, rgba(79,70,229,0.8), rgba(168,85,247,0.8))',
-              color: '#fff',
-              cursor: 'pointer',
-            }}
-          >
-            Use my location
-          </button>
+          />
+          <span style={{
+            position: 'absolute',
+            left: 14,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            opacity: 0.6,
+            fontSize: '1.1rem'
+          }}>🔍</span>
         </div>
       </div>
 
@@ -335,14 +863,21 @@ function ExploreSection() {
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
                 📞 {it.ownerPhone}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                  {it.finder.charAt(0)}
+              {it.finder && it.finder !== 'Missing Item' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                    {it.finder.charAt(0)}
+                  </div>
+                  <div style={{ fontSize: 13, opacity: 0.95 }}>
+                    Found by <strong>{it.finder}</strong>
+                  </div>
                 </div>
-                <div style={{ fontSize: 13, opacity: 0.95 }}>
-                  Found by <strong>{it.finder}</strong>
+              )}
+              {it.finder === 'Missing Item' && (
+                <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: 13 }}>
+                  🔍 <strong>Missing Item</strong> - Owner looking for this
                 </div>
-              </div>
+              )}
               <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
                 Found at: {it.location}{it.distanceKm != null ? ` • ~${it.distanceKm} km away` : ''} • {it.date}
               </div>
@@ -435,10 +970,143 @@ function ExploreSection() {
   );
 }
 
+// Profile Page Component
+function ProfilePage({ user }) {
+  if (!user) {
+    return (
+      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <h2>Please sign in to view your profile</h2>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '40px 20px', maxWidth: '600px', margin: '0 auto' }}>
+      <div style={{
+        background: 'rgba(255,255,255,0.08)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        borderRadius: '16px',
+        padding: '32px',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.20)',
+        backdropFilter: 'blur(8px)',
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{
+            width: '100px',
+            height: '100px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '2.5rem',
+            fontWeight: 700,
+            margin: '0 auto 16px',
+            color: '#fff'
+          }}>
+            {user.displayName ? user.displayName.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+          </div>
+          <h1 style={{ margin: '0 0 8px', fontSize: '2rem', fontWeight: 700 }}>My Profile</h1>
+          <p style={{ margin: 0, opacity: 0.8 }}>Your account information</p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Full Name</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.displayName || 'Not provided'}</div>
+          </div>
+
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Email Address</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.email}</div>
+          </div>
+
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Account Status</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#10b981' }}>✓ Active</div>
+          </div>
+
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Member Since</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>
+              {user.metadata?.creationTime ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+              }) : 'N/A'}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '32px', padding: '16px', background: 'rgba(79,70,229,0.15)', borderRadius: '12px', border: '1px solid rgba(79,70,229,0.3)' }}>
+          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>
+            💡 <strong>Tip:</strong> Keep your account information up to date to help others contact you about found items.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
-  const [view, setView] = useState('explore'); // default to Explore as home
+  const [view, setView] = useState('explore'); // 'explore', 'find', or 'profile'
+  const [userItems, setUserItems] = useState([]); // User-submitted missing items
+  const [showAddModal, setShowAddModal] = useState(false); // Control modal visibility
+  const [showAuthModal, setShowAuthModal] = useState(false); // Control auth modal visibility
+  const [user, setUser] = useState(null); // Current authenticated user
+
+  // Listen for authentication state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      
+      // Sync user to backend when logged in
+      if (currentUser) {
+        try {
+          await syncUserToBackend(currentUser);
+          console.log('✅ User synced on auth state change');
+        } catch (error) {
+          console.error('Failed to sync user:', error);
+        }
+      } else {
+        // Clear auth token when logged out
+        setAuthToken(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Handle logout
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setView('explore');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   // Placeholder items for browsing; replace with real data later
   const items = [
@@ -448,40 +1116,151 @@ export default function Home() {
     { id: 4, title: 'Passport', category: 'Documents', location: 'Airport T3', date: '2025-09-14' },
   ];
 
-  const filtered = items.filter((it) => {
+  // Combine items with user-submitted items for home page display
+  const allDisplayItems = [...items, ...userItems.map(item => ({
+    id: item.id,
+    title: item.name,
+    category: item.category || 'Others',
+    location: item.location,
+    date: item.date
+  }))];
+
+  const filtered = allDisplayItems.filter((it) => {
     const matchesCategory = category === 'All' || it.category === category;
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.location.toLowerCase().includes(q);
     return matchesCategory && matchesQuery;
   });
 
+  // Handle submission of new missing item
+  const handleAddItem = (formData) => {
+    const newItem = {
+      id: `user-${Date.now()}`,
+      name: formData.name,
+      title: formData.name,
+      description: formData.description,
+      location: formData.location,
+      image: formData.preview || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
+      date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
+      ownerName: 'You',
+      ownerLocation: formData.location,
+      ownerPhone: formData.mobile,
+      finder: 'Missing Item',
+      category: formData.category || 'Others'
+    };
+    setUserItems(prev => [newItem, ...prev]);
+    setShowAddModal(false);
+  };
+
   return (
-    <div style={{ background: '#0b0b0b', minHeight: '100vh', color: '#ffffff' }}>
-      <Navbar onNavigate={setView} />
+    <div style={{ background: '#0b0b0b', minHeight: '100vh', color: '#ffffff', position: 'relative', overflowX: 'hidden', overflowY: 'auto' }}>
+      <Navbar 
+        onNavigate={setView} 
+        user={user} 
+        onAuthClick={() => setShowAuthModal(true)}
+        onLogout={handleLogout}
+      />
 
       {/* Threads full-screen animated background */}
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0 }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'none' }}>
         <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-          <Threads amplitude={1} distance={0.2} enableMouseInteraction={true} />
+          <Threads amplitude={1} distance={0.2} enableMouseInteraction={false} />
         </div>
       </div>
 
       {/* Foreground content above background */}
-      <main style={{ position: 'relative', zIndex: 1, paddingTop: 96 }}>
-        <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px' }}>
+      <main style={{ position: 'relative', zIndex: 1, paddingTop: 96, minHeight: 'calc(100vh - 96px)', paddingBottom: 40 }}>
+        <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
-            <ExploreSection />
+            <ExploreSection userItems={userItems} />
+          ) : view === 'find' ? (
+            <div style={{ padding: '20px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h1 style={{ fontSize: '2rem', margin: 0 }}>Find Missing Item</h1>
+                <button 
+                  onClick={() => setShowAddModal(true)}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, opacity 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.opacity = '0.9';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.opacity = '1';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>+</span> Post Missing Product
+                </button>
+              </div>
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '14px',
+                padding: '24px',
+                marginBottom: '24px'
+              }}>
+                <h2 style={{ marginTop: 0 }}>Search for your lost item</h2>
+                <p>If you've lost an item, please check the items listed in the Explore section or report a missing item using the "Post Missing Product" button above.</p>
+                <div style={{ marginTop: '20px' }}>
+                  <button 
+                    onClick={() => setView('explore')}
+                    style={{
+                      padding: '12px 24px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'opacity 0.2s',
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                  >
+                    Browse Found Items
+                  </button>
+                </div>
+              </div>
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '14px',
+                padding: '24px',
+              }}>
+                <h3>Can't find your item?</h3>
+                <p>If you can't find your item in the found items list, you can:</p>
+                <ul style={{ paddingLeft: '20px' }}>
+                  <li>Check back later as new items are added regularly</li>
+                  <li>Use the search function to look for specific items</li>
+                  <li>Report your lost item using the + button</li>
+                </ul>
+              </div>
+            </div>
+          ) : view === 'profile' ? (
+            <ProfilePage user={user} />
           ) : (
-            <>
+            <div>
               {/* Hero banner */}
               <section
                 style={{
-                  background: 'linear-gradient(135deg, #4f46e5 0%, #06b6d4 50%, #a855f7 100%)',
+                  background: 'transparent',
                   borderRadius: 18,
                   padding: '24px 24px',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
                   color: '#ffffff',
-                  backdropFilter: 'saturate(140%)',
                   marginBottom: 16,
                   transition: 'transform 400ms ease, box-shadow 400ms ease',
                 }}
@@ -491,7 +1270,7 @@ export default function Home() {
                 <p style={{ marginTop: 6, opacity: 0.95 }}>Help reunite people with their lost belongings</p>
               </section>
 
-              {/* Search + Filter card */}
+              {/* Filter card */}
               <section
                 style={{
                   background: 'rgba(255,255,255,0.08)',
@@ -504,48 +1283,27 @@ export default function Home() {
                   marginBottom: 16,
                 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', gap: 10 }}>
-                  <div style={{ position: 'relative' }}>
-                    <input
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search lost items..."
-                      aria-label="Search lost items"
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px 10px 36px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        background: 'rgba(0,0,0,0.35)',
-                        color: '#fff',
-                        outline: 'none',
-                        transition: 'border-color 200ms ease, box-shadow 200ms ease',
-                      }}
-                    />
-                    <span style={{ position: 'absolute', left: 12, top: 8, opacity: 0.7 }}>🔎</span>
-                  </div>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value)}
-                    aria-label="Filter by category"
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: 10,
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      background: 'rgba(0,0,0,0.35)',
-                      color: '#fff',
-                      outline: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option>All</option>
-                    <option>Electronics</option>
-                    <option>Documents</option>
-                    <option>Accessories</option>
-                    <option>Others</option>
-                  </select>
-                </div>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  aria-label="Filter by category"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.18)',
+                    background: 'rgba(0,0,0,0.35)',
+                    color: '#fff',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option>All</option>
+                  <option>Electronics</option>
+                  <option>Documents</option>
+                  <option>Accessories</option>
+                  <option>Others</option>
+                </select>
               </section>
 
               {/* Results */}
@@ -630,20 +1388,124 @@ export default function Home() {
                   ))}
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
-
-        {/* Local styles for subtle effects */}
-        <style>
-          {`
-            @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-            .hero-banner:hover { box-shadow: 0 14px 40px rgba(0,0,0,0.35); transform: translateY(-1px); }
-            .lost-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,0.28); }
-            @media (max-width: 640px) { .hero-banner { padding: 18px; } }
-          `}
-        </style>
       </main>
+
+      {/* Add Item Modal */}
+      <AddItemModal 
+        isOpen={showAddModal} 
+        onClose={() => setShowAddModal(false)} 
+        onSubmit={handleAddItem} 
+      />
+
+      {/* Auth Modal */}
+      <AuthModal 
+        isOpen={showAuthModal} 
+        onClose={() => setShowAuthModal(false)} 
+        onAuthSuccess={() => setShowAuthModal(false)} 
+      />
+
+      {/* Floating Action Button - Show on all pages except Find */}
+      {view !== 'find' && (
+        <>
+          <style>
+            {`
+              @keyframes fabGlow {
+                0%, 100% {
+                  opacity: 0.5;
+                  transform: scale(1);
+                }
+                50% {
+                  opacity: 0.8;
+                  transform: scale(1.2);
+                }
+              }
+              
+              .fab-glow {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(168,85,247,0.5) 0%, transparent 70%);
+                animation: fabGlow 2s ease-in-out infinite;
+                pointer-events: none;
+              }
+              
+              .fab-container {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                z-index: 100;
+              }
+              
+              .fab-text {
+                opacity: 0;
+                transform: translateX(20px);
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                white-space: nowrap;
+                background: rgba(0, 0, 0, 0.8);
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: 1px solid rgba(255,255,255,0.2);
+                color: white;
+                font-size: 0.9rem;
+                font-weight: 500;
+                pointer-events: none;
+                backdrop-filter: blur(10px);
+              }
+              
+              .fab-container:hover .fab-text {
+                opacity: 1;
+                transform: translateX(0);
+              }
+              
+              .fab-button {
+                width: 64px;
+                height: 64px;
+                border-radius: 50%;
+                flex-shrink: 0;
+              }
+            `}
+          </style>
+          
+          <div className="fab-container">
+            <span className="fab-text">Find the missing product</span>
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="fab-button"
+              style={{
+                background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                border: 'none',
+                color: 'white',
+                fontSize: '2rem',
+                fontWeight: 300,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'transform 0.2s ease',
+                position: 'relative',
+                boxShadow: '0 4px 20px rgba(79,70,229,0.4), 0 8px 40px rgba(168,85,247,0.3)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)';
+              }}
+              title="Post Missing Product"
+            >
+              <div className="fab-glow"></div>
+              <span style={{ position: 'relative', zIndex: 2 }}>+</span>
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
