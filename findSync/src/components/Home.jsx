@@ -4,8 +4,111 @@ import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken } from '../services/api.js';
 
+// Success checkmark animation component
+const CheckmarkAnimation = () => (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 0',
+    textAlign: 'center'
+  }}>
+    <div style={{
+      width: '80px',
+      height: '80px',
+      borderRadius: '50%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'rgba(34, 197, 94, 0.15)',
+      margin: '0 auto 20px',
+      position: 'relative',
+      animation: 'scaleIn 0.3s ease-out'
+    }}>
+      <svg 
+        width="48" 
+        height="48" 
+        viewBox="0 0 48 48" 
+        fill="none" 
+        xmlns="http://www.w3.org/2000/svg"
+        style={{
+          animation: 'checkmark 0.5s ease-in-out 0.3s both',
+          transformOrigin: '50% 50%',
+          strokeDasharray: 60,
+          strokeDashoffset: 60,
+          stroke: '#22c55e',
+          strokeWidth: 4
+        }}
+      >
+        <path d="M8 24L20 36L40 12" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+    <h3 style={{
+      color: '#22c55e',
+      fontSize: '1.5rem',
+      margin: '10px 0',
+      fontWeight: 600
+    }}>Posted!</h3>
+    <p style={{
+      color: 'rgba(255, 255, 255, 0.8)',
+      margin: '5px 0 0',
+      fontSize: '0.95rem'
+    }}>Your item has been listed successfully.</p>
+  </div>
+);
+
+// Loading spinner component
+const LoadingSpinner = () => (
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 0',
+    textAlign: 'center'
+  }}>
+    <div style={{
+      width: '60px',
+      height: '60px',
+      border: '5px solid rgba(79, 70, 229, 0.2)',
+      borderTopColor: '#4f46e5',
+      borderRadius: '50%',
+      margin: '0 auto 20px',
+      animation: 'spin 1s linear infinite'
+    }}></div>
+    <h3 style={{
+      color: '#fff',
+      fontSize: '1.25rem',
+      margin: '10px 0',
+      fontWeight: 600
+    }}>Posting your item...</h3>
+    <p style={{
+      color: 'rgba(255, 255, 255, 0.6)',
+      margin: '5px 0 0',
+      fontSize: '0.9rem'
+    }}>This will just take a moment.</p>
+  </div>
+);
+
+// Keyframes for animations
+const styles = document.createElement('style');
+styles.textContent = `
+  @keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  @keyframes checkmark {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+document.head.appendChild(styles);
+
 // Modal component for adding a missing item
-function AddItemModal({ isOpen, onClose, onSubmit }) {
+function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -1072,15 +1175,45 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [view, setView] = useState('explore'); // 'explore', 'find', or 'profile'
-  const [userItems, setUserItems] = useState([]); // User-submitted missing items
+  const [userItems, setUserItems] = useState([]); // User-submitted missing items (offline/local only)
+  const [missingItems, setMissingItems] = useState([]); // Items fetched from backend
   const [showAddModal, setShowAddModal] = useState(false); // Control modal visibility
   const [showAuthModal, setShowAuthModal] = useState(false); // Control auth modal visibility
+  const [modalItem, setModalItem] = useState(null); // Currently selected item for details modal
   const [user, setUser] = useState(null); // Current authenticated user
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  // Fetch missing items from backend
+  const fetchMissingItems = async () => {
+    try {
+      const res = await getAllMissingItems();
+      if (res && res.items) {
+        setMissingItems(res.items.map(it => ({
+          id: it.id,
+          title: it.name,
+          description: it.description,
+          location: it.location,
+          date: new Date(it.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
+          image: it.image_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
+          ownerName: it.owner_name || 'Unknown',
+          ownerPhone: it.mobile,
+          ownerLocation: it.location,
+          finder: 'Missing Item',
+          category: it.category || 'Others'
+        })));
+      }
+    } catch (err) {
+      console.error('Failed to fetch missing items:', err);
+    }
+  };
 
   // Listen for authentication state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      // Fetch items whenever auth state changes so we always have latest
+      fetchMissingItems();
       
       // Sync user to backend when logged in
       if (currentUser) {
@@ -1096,6 +1229,11 @@ export default function Home() {
       }
     });
     return () => unsubscribe();
+  }, []);
+
+  // Initial fetch of missing items
+  useEffect(() => {
+    fetchMissingItems();
   }, []);
 
   // Handle logout
@@ -1133,23 +1271,47 @@ export default function Home() {
   });
 
   // Handle submission of new missing item
-  const handleAddItem = (formData) => {
-    const newItem = {
-      id: `user-${Date.now()}`,
-      name: formData.name,
-      title: formData.name,
-      description: formData.description,
-      location: formData.location,
-      image: formData.preview || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
-      date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-      ownerName: 'You',
-      ownerLocation: formData.location,
-      ownerPhone: formData.mobile,
-      finder: 'Missing Item',
-      category: formData.category || 'Others'
-    };
-    setUserItems(prev => [newItem, ...prev]);
-    setShowAddModal(false);
+  const handleAddItem = async (formData) => {
+    setIsSubmitting(true);
+    try {
+      await createMissingItem({
+        name: formData.name,
+        description: formData.description,
+        location: formData.location,
+        mobile: formData.mobile,
+        image_url: formData.preview,
+        category: formData.category || 'Others'
+      });
+      // Show success animation
+      setShowSuccess(true);
+      // Refresh list from backend
+      await fetchMissingItems();
+      // Hide success after 2 seconds and close modal
+      setTimeout(() => {
+        setShowSuccess(false);
+        setShowAddModal(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to create missing item:', err);
+      // Fallback to local state so user still sees it
+      const newItem = {
+        id: `temp-${Date.now()}`,
+        title: formData.name,
+        description: formData.description,
+        location: formData.location,
+        image: formData.preview || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
+        date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
+        ownerName: 'You',
+        ownerLocation: formData.location,
+        ownerPhone: formData.mobile,
+        finder: 'Missing Item',
+        category: formData.category || 'Others'
+      };
+      setUserItems(prev => [newItem, ...prev]);
+      setShowAddModal(false);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -1172,7 +1334,7 @@ export default function Home() {
       <main style={{ position: 'relative', zIndex: 1, paddingTop: 96, minHeight: 'calc(100vh - 96px)', paddingBottom: 40 }}>
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
-            <ExploreSection userItems={userItems} />
+            <ExploreSection userItems={[...missingItems, ...userItems]} />
           ) : view === 'find' ? (
             <div style={{ padding: '20px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -1368,6 +1530,7 @@ export default function Home() {
                       <div style={{ opacity: 0.9, marginTop: 8 }}>{it.location}</div>
                       <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>{it.date}</div>
                       <button
+                        onClick={() => setModalItem(it)}
                         style={{
                           marginTop: 12,
                           width: '100%',
@@ -1393,11 +1556,121 @@ export default function Home() {
         </div>
       </main>
 
+      {/* Item Details Modal */}
+      {modalItem && (
+        <div aria-modal="true" role="dialog" onClick={() => setModalItem(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(720px, 96vw)', background: 'rgba(17,17,17,0.9)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 0 }}>
+              <div style={{ background: '#111', minHeight: 260 }}>
+                <img 
+                  src={modalItem.image || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400'} 
+                  alt={modalItem.title} 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+                />
+              </div>
+              <div style={{ padding: 18 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>{modalItem.title}</h3>
+                  <button 
+                    onClick={() => setModalItem(null)} 
+                    aria-label="Close"
+                    style={{ 
+                      border: '1px solid rgba(255,255,255,0.2)', 
+                      background: 'transparent', 
+                      color: '#fff', 
+                      borderRadius: 8, 
+                      padding: '6px 10px', 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>
+                  {modalItem.description || 'No description available.'}
+                </p>
+                <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
+                  <div>Category: <strong>{modalItem.category || 'Not specified'}</strong></div>
+                  <div>Location: <strong>{modalItem.location || 'Not specified'}</strong></div>
+                  <div>Date: <strong>{modalItem.date || 'Not specified'}</strong></div>
+                  {modalItem.ownerName && (
+                    <div>Owner: <strong>{modalItem.ownerName}</strong></div>
+                  )}
+                  {modalItem.ownerPhone && (
+                    <div>Contact: <strong>{modalItem.ownerPhone}</strong></div>
+                  )}
+                </div>
+
+                {(modalItem.ownerPhone && modalItem.ownerName) && (
+                  <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                    <a 
+                      href={`tel:${modalItem.ownerPhone.replace(/\s/g, '')}`}
+                      style={{ 
+                        padding: '10px 12px', 
+                        borderRadius: 10, 
+                        border: '1px solid rgba(34,197,94,0.35)', 
+                        background: 'rgba(34,197,94,0.18)', 
+                        color: '#bbf7d0', 
+                        textDecoration: 'none',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      📞 Call Owner
+                    </a>
+                    <button
+                      onClick={async () => { 
+                        try { 
+                          await navigator.clipboard.writeText(modalItem.ownerPhone); 
+                          alert('Phone number copied to clipboard'); 
+                        } catch (err) { 
+                          console.error('Failed to copy:', err);
+                          alert('Failed to copy phone number'); 
+                        } 
+                      }}
+                      style={{ 
+                        padding: '10px 12px', 
+                        borderRadius: 10, 
+                        border: '1px solid rgba(59,130,246,0.35)', 
+                        background: 'rgba(59,130,246,0.18)', 
+                        color: '#bfdbfe', 
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      📋 Copy Phone
+                    </button>
+                    <a 
+                      href={`https://wa.me/${modalItem.ownerPhone.replace(/[^\d]/g, '')}?text=Hi%2C%20I%20saw%20your%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      style={{ 
+                        padding: '10px 12px', 
+                        borderRadius: 10, 
+                        border: '1px solid rgba(16,185,129,0.35)', 
+                        background: 'rgba(16,185,129,0.18)', 
+                        color: '#d1fae5', 
+                        textDecoration: 'none',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      💬 WhatsApp
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Item Modal */}
       <AddItemModal 
         isOpen={showAddModal} 
         onClose={() => setShowAddModal(false)} 
-        onSubmit={handleAddItem} 
+        onSubmit={handleAddItem}
+        isSubmitting={isSubmitting}
+        showSuccess={showSuccess}
       />
 
       {/* Auth Modal */}
