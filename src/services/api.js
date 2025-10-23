@@ -33,11 +33,25 @@ const apiRequest = async (url, options = {}) => {
 
   let response;
   try {
+    console.log('Making API request:', {
+      url: `${API_URL}${url}`,
+      method: options.method || 'GET',
+      headers,
+      body: options.body ? JSON.parse(options.body) : undefined
+    });
+
     response = await fetch(`${API_URL}${url}`, {
       ...options,
       headers,
     });
+
+    console.log('API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries())
+    });
   } catch (networkError) {
+    console.error('Network error:', networkError);
     // Surface concise error for offline/dev without backend
     throw new Error('Cannot reach API. Is the backend running?');
   }
@@ -83,6 +97,17 @@ export const getUserProfile = async () => {
 
 // Item API calls
 export const createMissingItem = async (itemData) => {
+  console.log('Creating missing item with data:', itemData);
+  
+  // Validate required fields before making request
+  const requiredFields = ['item_name', 'location', 'phone'];
+  const missingFields = requiredFields.filter(field => !itemData[field]);
+  
+  if (missingFields.length > 0) {
+    console.error('Missing required fields:', missingFields);
+    throw new Error(`Required fields missing: ${missingFields.join(', ')}`);
+  }
+
   const response = await apiRequest('/items/missing', {
     method: 'POST',
     body: JSON.stringify(itemData),
@@ -120,7 +145,7 @@ export const getAllMissingItems = async () => {
         created_at: item.posted_at,
         image_url: item.image_url,
         owner_name: item.owner_name,
-        mobile: item.owner_phone,
+        phone: item.owner_phone,
         category: item.category,
         status: item.status,
         post_type: item.post_type

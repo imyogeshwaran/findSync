@@ -26,6 +26,7 @@ CREATE TABLE Items (
     description TEXT,
     category VARCHAR(50),
     post_type ENUM('lost', 'found') NOT NULL,
+    phone VARCHAR(15) DEFAULT NULL,
     location VARCHAR(100) NOT NULL,
     image_url VARCHAR(255),
     status ENUM('open', 'matched', 'closed') DEFAULT 'open',
@@ -81,8 +82,8 @@ INSERT IGNORE INTO Users (firebase_uid, name, email) VALUES
 ('sample-uid-1', 'John Doe', 'john@example.com'),
 ('sample-uid-2', 'Sarah Wilson', 'sarah@example.com');
 
-INSERT IGNORE INTO Items (user_id, item_name, description, category, post_type, location, image_url) VALUES 
-(1, 'Black Wallet', 'Leather wallet found near the fountain', 'Accessories', 'found', 'Central Park', 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400'),
-(2, 'iPhone 13', 'Black iPhone with cracked screen', 'Electronics', 'lost', 'City Library', 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=400');
+INSERT IGNORE INTO Items (user_id, item_name, description, category, post_type, phone, location, image_url) VALUES 
+(1, 'Black Wallet', 'Leather wallet found near the fountain', 'Accessories', 'found', '+1-555-0123', 'Central Park', 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400'),
+(2, 'iPhone 13', 'Black iPhone with cracked screen', 'Electronics', 'lost', '+1-555-0456', 'City Library', 'https://images.unsplash.com/photo-1592750475338-74b7b21085ab?w=400');
 
 SELECT 'Database setup completed successfully!' as message;

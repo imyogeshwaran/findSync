@@ -1064,16 +1064,16 @@ function ExploreSection({ userItems = [] }) {
                 </div>
 
                 <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <a href={`tel:${modalItem.ownerPhone.replace(/\s/g, '')}`}
+                  <a href={`tel:${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/\s/g, '') : '')}`}
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.18)', color: '#bbf7d0', textDecoration: 'none' }}>
                     📞 Call Owner
                   </a>
                   <button
-                    onClick={async () => { try { await navigator.clipboard.writeText(modalItem.ownerPhone); alert('Phone number copied'); } catch { alert('Copy failed'); } }}
+                    onClick={async () => { try { await navigator.clipboard.writeText(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone : ''); alert('Phone number copied'); } catch { alert('Copy failed'); } }}
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.18)', color: '#bfdbfe', cursor: 'pointer' }}>
                     📋 Copy Phone
                   </button>
-                  <a href={`https://wa.me/${modalItem.ownerPhone.replace(/[^\d]/g, '')}?text=Hi%2C%20I%20saw%20your%20lost%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} target="_blank" rel="noreferrer"
+                  <a href={`https://wa.me/${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/[^\d]/g, '') : '')}?text=Hi%2C%20I%20saw%20your%20lost%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} target="_blank" rel="noreferrer"
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.18)', color: '#d1fae5', textDecoration: 'none' }}>
                     💬 WhatsApp
                   </a>

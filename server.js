@@ -27,7 +27,11 @@ const promisePool = pool.promise();
 pool.getConnection((err, connection) => {
   if (err) {
     console.error('❌ Error connecting to MySQL database:', err.message);
-    console.log('💡 Make sure MySQL is running and database exists');
+    console.log('💡 Database Setup Required:');
+    console.log('   1. Create database: mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS findsync;"');
+    console.log('   2. Run schema: mysql -u root -p findsync < setup-database.sql');
+    console.log('   3. Create .env file with your MySQL password');
+    console.log('   4. Restart server: npm run api');
   } else {
     console.log('✅ Successfully connected to MySQL database');
     connection.release();
@@ -75,32 +79,51 @@ app.get('/api/items/missing', async (req, res) => {
 
 app.post('/api/items/missing', authenticateToken, async (req, res) => {
   try {
-    const { name, description, location, mobile, image_url, category } = req.body;
+    const {
+      item_name: itemNameRaw,
+      name: nameRaw,
+      description,
+      location,
+      phone: phoneRaw,
+      mobile: mobileRaw,
+      image_url,
+      category
+    } = req.body;
+
     const userId = req.user.user_id;
-    
-    if (!name || !location) {
-      return res.status(400).json({ error: 'Name and location are required' });
+    const item_name = itemNameRaw || nameRaw;
+    const phone = phoneRaw || mobileRaw;
+
+    const missing = [];
+    if (!item_name) missing.push('item name');
+    if (!location) missing.push('location');
+    if (!phone) missing.push('mobile number');
+    if (missing.length) {
+      return res.status(400).json({
+        error: `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`
+      });
     }
-    
+
     const [result] = await promisePool.query(
-      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type) 
-       VALUES (?, ?, ?, ?, ?, ?, 'lost')`,
-      [userId, name, description, location, image_url, category || 'Others']
+      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone)
+       VALUES (?, ?, ?, ?, ?, ?, 'lost', ?)`,
+      [userId, item_name, description, location, image_url, category || 'Others', phone]
     );
-    
+
     res.status(201).json({
       success: true,
       message: 'Missing item created successfully',
       item: {
         item_id: result.insertId,
         user_id: userId,
-        item_name: name,
+        item_name,
         description,
         location,
         image_url,
         category: category || 'Others',
         post_type: 'lost',
-        status: 'open'
+        status: 'open',
+        phone
       }
     });
   } catch (error) {

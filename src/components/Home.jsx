@@ -110,10 +110,10 @@ document.head.appendChild(styles);
 // Modal component for adding a missing item
 function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) {
   const [formData, setFormData] = useState({
-    name: '',
+    item_name: '',
     description: '',
     location: '',
-    mobile: '',
+    phone: '',
     image: null,
     preview: null
   });
@@ -144,13 +144,24 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    console.log('Form submission attempt with data:', formData);
+    
+    // Validate required fields
+    if (!formData.item_name || !formData.location || !formData.phone) {
+      alert('Please fill in all required fields: Item Name, Location, and Phone Number');
+      return;
+    }
+    
+    console.log('All validation passed, submitting form');
     onSubmit(formData);
+    
     // Reset form
     setFormData({
-      name: '',
+      item_name: '',
       description: '',
       location: '',
-      mobile: '',
+      phone: '',
       image: null,
       preview: null
     });
@@ -237,8 +248,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
             </label>
             <input
               type="text"
-              name="name"
-              value={formData.name}
+              name="item_name"
+              value={formData.item_name}
               onChange={handleChange}
               required
               style={{
@@ -325,12 +336,12 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               fontSize: '0.9rem',
               opacity: 0.9
             }}>
-              Mobile Number
+              Phone Number
             </label>
             <input
               type="tel"
-              name="mobile"
-              value={formData.mobile}
+              name="phone"
+              value={formData.phone}
               onChange={handleChange}
               required
               style={{
@@ -1043,16 +1054,16 @@ function ExploreSection({ userItems = [] }) {
                 </div>
 
                 <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <a href={`tel:${modalItem.ownerPhone.replace(/\s/g, '')}`}
+                  <a href={`tel:${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/\s/g, '') : '')}`}
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(34,197,94,0.35)', background: 'rgba(34,197,94,0.18)', color: '#bbf7d0', textDecoration: 'none' }}>
                     📞 Call Owner
                   </a>
                   <button
-                    onClick={async () => { try { await navigator.clipboard.writeText(modalItem.ownerPhone); alert('Phone number copied'); } catch { alert('Copy failed'); } }}
+                    onClick={async () => { try { await navigator.clipboard.writeText(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone : ''); alert('Phone number copied'); } catch { alert('Copy failed'); } }}
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.18)', color: '#bfdbfe', cursor: 'pointer' }}>
                     📋 Copy Phone
                   </button>
-                  <a href={`https://wa.me/${modalItem.ownerPhone.replace(/[^\d]/g, '')}?text=Hi%2C%20I%20saw%20your%20lost%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} target="_blank" rel="noreferrer"
+                  <a href={`https://wa.me/${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/[^\d]/g, '') : '')}?text=Hi%2C%20I%20saw%20your%20lost%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} target="_blank" rel="noreferrer"
                     style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.18)', color: '#d1fae5', textDecoration: 'none' }}>
                     💬 WhatsApp
                   </a>
@@ -1190,16 +1201,16 @@ export default function Home() {
       if (res && res.items) {
         setMissingItems(res.items.map(it => ({
           id: it.id,
-          title: it.name,
+          title: it.title,
           description: it.description,
           location: it.location,
-          date: new Date(it.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-          image: it.image_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
-          ownerName: it.owner_name || 'Unknown',
-          ownerPhone: it.mobile,
-          ownerLocation: it.location,
-          finder: 'Missing Item',
-          category: it.category || 'Others'
+          date: it.date,
+          image: it.image || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
+          ownerName: it.ownerName,
+          ownerPhone: it.ownerPhone,
+          ownerLocation: it.ownerLocation,
+          category: it.category || 'Others',
+          status: it.status
         })));
       }
     } catch (err) {
@@ -1243,23 +1254,8 @@ export default function Home() {
   };
 
   // Placeholder items for browsing; replace with real data later
-  const items = [
-    { id: 1, title: 'Black Wallet', category: 'Accessories', location: 'Central Park', date: '2025-09-10' },
-    { id: 2, title: 'iPhone 13', category: 'Electronics', location: 'City Library', date: '2025-09-12' },
-    { id: 3, title: 'Blue Backpack', category: 'Accessories', location: 'Bus Station', date: '2025-09-13' },
-    { id: 4, title: 'Passport', category: 'Documents', location: 'Airport T3', date: '2025-09-14' },
-  ];
-
-  // Combine items with user-submitted items for home page display
-  const allDisplayItems = [...items, ...userItems.map(item => ({
-    id: item.id,
-    title: item.name,
-    category: item.category || 'Others',
-    location: item.location,
-    date: item.date
-  }))];
-
-  const filtered = allDisplayItems.filter((it) => {
+  // Filter and display items from the database
+  const filtered = missingItems.filter((it) => {
     const matchesCategory = category === 'All' || it.category === category;
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.location.toLowerCase().includes(q);
@@ -1270,14 +1266,20 @@ export default function Home() {
   const handleAddItem = async (formData) => {
     setIsSubmitting(true);
     try {
-      await createMissingItem({
-        name: formData.name,
+      console.log('Form data before submission:', JSON.stringify(formData, null, 2));
+      
+      const submitData = {
+        item_name: formData.item_name,
         description: formData.description,
         location: formData.location,
-        mobile: formData.mobile,
+        phone: formData.phone,
         image_url: formData.preview,
         category: formData.category || 'Others'
-      });
+      };
+      
+      console.log('Prepared submission data:', JSON.stringify(submitData, null, 2));
+      
+      await createMissingItem(submitData);
       // Show success animation
       setShowSuccess(true);
       // Refresh list from backend
@@ -1292,14 +1294,14 @@ export default function Home() {
       // Fallback to local state so user still sees it
       const newItem = {
         id: `temp-${Date.now()}`,
-        title: formData.name,
+        title: formData.item_name,
         description: formData.description,
         location: formData.location,
         image: formData.preview || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
         date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
         ownerName: 'You',
         ownerLocation: formData.location,
-        ownerPhone: formData.mobile,
+        ownerPhone: formData.phone,
         finder: 'Missing Item',
         category: formData.category || 'Others'
       };
@@ -1601,7 +1603,7 @@ export default function Home() {
                 {(modalItem.ownerPhone && modalItem.ownerName) && (
                   <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <a 
-                      href={`tel:${modalItem.ownerPhone.replace(/\s/g, '')}`}
+                      href={`tel:${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/\s/g, '') : '')}`}
                       style={{ 
                         padding: '10px 12px', 
                         borderRadius: 10, 
@@ -1617,7 +1619,7 @@ export default function Home() {
                     <button
                       onClick={async () => { 
                         try { 
-                          await navigator.clipboard.writeText(modalItem.ownerPhone); 
+                          await navigator.clipboard.writeText(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone : ''); 
                           alert('Phone number copied to clipboard'); 
                         } catch (err) { 
                           console.error('Failed to copy:', err);
@@ -1637,7 +1639,7 @@ export default function Home() {
                       📋 Copy Phone
                     </button>
                     <a 
-                      href={`https://wa.me/${modalItem.ownerPhone.replace(/[^\d]/g, '')}?text=Hi%2C%20I%20saw%20your%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} 
+                      href={`https://wa.me/${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/[^\d]/g, '') : '')}?text=Hi%2C%20I%20saw%20your%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} 
                       target="_blank" 
                       rel="noreferrer"
                       style={{ 

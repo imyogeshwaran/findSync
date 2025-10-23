@@ -3,17 +3,47 @@ const db = require('../config/database');
 // Create a missing item
 exports.createMissingItem = async (req, res) => {
   try {
-    const { name, description, location, image_url, category } = req.body;
+    console.log('Request received at:', new Date().toISOString());
+    console.log('Full request:', {
+      body: req.body,
+      headers: req.headers,
+      user: req.user,
+      method: req.method,
+      path: req.path,
+      query: req.query
+    });
+    
+    console.log('Raw request body:', typeof req.body, req.body);
+    
+    const { item_name, description, location, image_url, category, phone } = req.body;
     const userId = req.user.id;
     
-    if (!name || !location) {
-      return res.status(400).json({ error: 'Name and location are required' });
+    console.log('Extracted fields:', {
+      item_name: item_name || '(missing)',
+      description: description || '(missing)',
+      location: location || '(missing)',
+      image_url: image_url || '(missing)',
+      category: category || '(missing)',
+      phone: phone || '(missing)',
+      userId: userId || '(missing)'
+    });
+    
+    // Validate required fields per schema
+    const missingFields = [];
+    if (!item_name) missingFields.push('item name');
+    if (!location) missingFields.push('location');
+    if (!phone) missingFields.push('mobile number');
+    
+    if (missingFields.length > 0) {
+      return res.status(400).json({ 
+        error: `${missingFields.join(', ')} ${missingFields.length > 1 ? 'are' : 'is'} required`
+      });
     }
     
     const [result] = await db.query(
-      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type) 
-       VALUES (?, ?, ?, ?, ?, ?, 'lost')`,
-      [userId, name, description, location, image_url, category || 'Others']
+      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
+       VALUES (?, ?, ?, ?, ?, ?, 'lost', ?)`,
+      [userId, item_name, description, location, image_url, category || 'Others', phone]
     );
     
     res.status(201).json({
@@ -22,12 +52,12 @@ exports.createMissingItem = async (req, res) => {
       item: {
         id: result.insertId,
         user_id: userId,
-        name,
+        item_name,
         description,
         location,
-        mobile,
         image_url,
-        category: category || 'Others'
+        category: category || 'Others',
+        phone
       }
     });
   } catch (error) {
@@ -40,14 +70,34 @@ exports.createMissingItem = async (req, res) => {
 exports.getAllMissingItems = async (req, res) => {
   try {
     const [items] = await db.query(
-      `SELECT i.*, u.name as owner_name, u.email as owner_email 
+      `SELECT 
+        i.*,
+        u.name as owner_name,
+        u.email as owner_email,
+        i.phone as owner_phone,
+        DATE_FORMAT(i.posted_at, '%Y-%m-%d') as date
        FROM Items i 
        JOIN Users u ON i.user_id = u.user_id 
        WHERE i.post_type = 'lost' AND i.status = 'open'
        ORDER BY i.posted_at DESC`
     );
     
-    res.json({ success: true, items });
+    // Transform the items to match frontend expectations
+    const transformedItems = items.map(item => ({
+      id: item.item_id,
+      title: item.item_name,
+      description: item.description,
+      location: item.location,
+      category: item.category,
+      image: item.image_url,
+      date: item.date,
+      ownerName: item.owner_name,
+      ownerPhone: item.phone,
+      ownerLocation: item.location,
+      status: item.status
+    }));
+
+    res.json({ success: true, items: transformedItems });
   } catch (error) {
     console.error('Error getting missing items:', error);
     res.status(500).json({ error: 'Failed to get missing items', details: error.message });
