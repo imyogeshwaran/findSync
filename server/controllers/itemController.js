@@ -3,7 +3,7 @@ const db = require('../config/database');
 // Create a missing item
 exports.createMissingItem = async (req, res) => {
   try {
-    const { name, description, location, mobile, image_url, category } = req.body;
+    const { name, description, location, image_url, category } = req.body;
     const userId = req.user.id;
     
     if (!name || !location) {
@@ -11,9 +11,9 @@ exports.createMissingItem = async (req, res) => {
     }
     
     const [result] = await db.query(
-      `INSERT INTO missing_items (user_id, name, description, location, mobile, image_url, category) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, description, location, mobile, image_url, category || 'Others']
+      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type) 
+       VALUES (?, ?, ?, ?, ?, ?, 'lost')`,
+      [userId, name, description, location, image_url, category || 'Others']
     );
     
     res.status(201).json({
@@ -40,17 +40,17 @@ exports.createMissingItem = async (req, res) => {
 exports.getAllMissingItems = async (req, res) => {
   try {
     const [items] = await db.query(
-      `SELECT mi.*, u.name as owner_name, u.email as owner_email 
-       FROM missing_items mi 
-       JOIN users u ON mi.user_id = u.id 
-       WHERE mi.status = 'missing'
-       ORDER BY mi.created_at DESC`
+      `SELECT i.*, u.name as owner_name, u.email as owner_email 
+       FROM Items i 
+       JOIN Users u ON i.user_id = u.user_id 
+       WHERE i.post_type = 'lost' AND i.status = 'open'
+       ORDER BY i.posted_at DESC`
     );
     
     res.json({ success: true, items });
   } catch (error) {
     console.error('Error getting missing items:', error);
-    res.status(500).json({ error: 'Failed to get missing items' });
+    res.status(500).json({ error: 'Failed to get missing items', details: error.message });
   }
 };
 
@@ -60,9 +60,9 @@ exports.getUserMissingItems = async (req, res) => {
     const userId = req.user.id;
     
     const [items] = await db.query(
-      `SELECT * FROM missing_items 
-       WHERE user_id = ? 
-       ORDER BY created_at DESC`,
+      `SELECT * FROM Items 
+       WHERE user_id = ? AND post_type = 'lost'
+       ORDER BY posted_at DESC`,
       [userId]
     );
     
@@ -79,10 +79,10 @@ exports.getMissingItemById = async (req, res) => {
     const { id } = req.params;
     
     const [items] = await db.query(
-      `SELECT mi.*, u.name as owner_name, u.email as owner_email, u.firebase_uid 
-       FROM missing_items mi 
-       JOIN users u ON mi.user_id = u.id 
-       WHERE mi.id = ?`,
+      `SELECT i.*, u.name as owner_name, u.email as owner_email, u.firebase_uid 
+       FROM Items i 
+       JOIN Users u ON i.user_id = u.user_id 
+       WHERE i.item_id = ? AND i.post_type = 'lost'`,
       [id]
     );
     

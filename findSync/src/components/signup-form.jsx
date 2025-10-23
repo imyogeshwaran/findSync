@@ -33,7 +33,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const cred = await doCreateUserWithEmailAndPassword(formData.email, formData.password);
+      const cred = await doCreateUserWithEmailAndPassword(formData.email, formData.password, formData.name);
       await logAuthEvent('signup', cred.user);
       setStatusMsg('Account created successfully!');
       if (onAuthSuccess) onAuthSuccess(cred.user);

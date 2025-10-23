@@ -7,8 +7,28 @@ export const doLinkPasswordToGoogleAccount = async (user, password) => {
 import { auth } from "../firebase/firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail, updatePassword, sendEmailVerification, getAdditionalUserInfo } from 'firebase/auth';
 
-export const doCreateUserWithEmailAndPassword = async(email, password) => {
-    return createUserWithEmailAndPassword(auth, email, password);
+export const doCreateUserWithEmailAndPassword = async(email, password, name) => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    // Call the backend API to sync user data
+    try {
+        const response = await fetch('/api/users/sync', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                firebase_uid: userCredential.user.uid,
+                email: email,
+                name: name
+            }),
+        });
+        if (!response.ok) {
+            throw new Error('Failed to sync user data');
+        }
+    } catch (error) {
+        console.error('Error syncing user data:', error);
+    }
+    return userCredential;
 };
 export const doSignInWithEmailAndPassword = (email, password) => {
     return signInWithEmailAndPassword(auth, email, password);

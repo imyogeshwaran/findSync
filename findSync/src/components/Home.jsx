@@ -142,9 +142,29 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    let payload;
+    if (formData.image) {
+      // If image is present, use FormData
+      payload = new FormData();
+      payload.append('name', formData.name);
+      payload.append('description', formData.description);
+      payload.append('location', formData.location);
+      payload.append('mobile', formData.mobile);
+      payload.append('image', formData.image);
+      payload.append('category', 'Others');
+    } else {
+      // Otherwise, use JSON
+      payload = {
+        name: formData.name,
+        description: formData.description,
+        location: formData.location,
+        mobile: formData.mobile,
+        category: 'Others'
+      };
+    }
+    await onSubmit(payload);
     // Reset form
     setFormData({
       name: '',
@@ -1273,6 +1293,14 @@ export default function Home() {
   // Handle submission of new missing item
   const handleAddItem = async (formData) => {
     setIsSubmitting(true);
+
+    // Validation: Ensure name and location are provided
+    if (!formData.name || !formData.location) {
+      alert('Please provide both the item name and location.');
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       await createMissingItem({
         name: formData.name,
@@ -1334,132 +1362,22 @@ export default function Home() {
       <main style={{ position: 'relative', zIndex: 1, paddingTop: 96, minHeight: 'calc(100vh - 96px)', paddingBottom: 40 }}>
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
-            <ExploreSection userItems={[...missingItems, ...userItems]} />
+            <ExploreSection userItems={[...missingItems, ...userItems]} onViewItem={(it) => setModalItem(it)} />
           ) : view === 'find' ? (
-            <div style={{ padding: '20px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h1 style={{ fontSize: '2rem', margin: 0 }}>Find Missing Item</h1>
-                <button 
-                  onClick={() => setShowAddModal(true)}
-                  style={{
-                    padding: '12px 24px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
-                    border: 'none',
-                    color: 'white',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s, opacity 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.opacity = '0.9';
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.opacity = '1';
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  <span style={{ fontSize: '1.2rem' }}>+</span> Post Missing Product
-                </button>
-              </div>
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '14px',
-                padding: '24px',
-                marginBottom: '24px'
-              }}>
-                <h2 style={{ marginTop: 0 }}>Search for your lost item</h2>
-                <p>If you've lost an item, please check the items listed in the Explore section or report a missing item using the "Post Missing Product" button above.</p>
-                <div style={{ marginTop: '20px' }}>
-                  <button 
-                    onClick={() => setView('explore')}
-                    style={{
-                      padding: '12px 24px',
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
-                      border: 'none',
-                      color: 'white',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'opacity 0.2s',
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
-                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                  >
-                    Browse Found Items
-                  </button>
-                </div>
-              </div>
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '14px',
-                padding: '24px',
-              }}>
-                <h3>Can't find your item?</h3>
-                <p>If you can't find your item in the found items list, you can:</p>
-                <ul style={{ paddingLeft: '20px' }}>
-                  <li>Check back later as new items are added regularly</li>
-                  <li>Use the search function to look for specific items</li>
-                  <li>Report your lost item using the + button</li>
-                </ul>
-              </div>
-            </div>
+            <FindView onPostClick={() => setShowAddModal(true)} onBrowseClick={() => setView('explore')} />
           ) : view === 'profile' ? (
             <ProfilePage user={user} />
           ) : (
             <div>
-              {/* Hero banner */}
-              <section
-                style={{
-                  background: 'transparent',
-                  borderRadius: 18,
-                  padding: '24px 24px',
-                  color: '#ffffff',
-                  marginBottom: 16,
-                  transition: 'transform 400ms ease, box-shadow 400ms ease',
-                }}
-                className="hero-banner"
-              >
-                <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800, letterSpacing: 0.3 }}>Find Lost Items</h1>
+              {/* Simple hero banner */}
+              <section style={{ background: 'transparent', borderRadius: 18, padding: '24px 24px', color: '#ffffff', marginBottom: 16 }} className="hero-banner">
+                <h1 style={{ margin: 0, fontSize: '2rem', fontWeight: 800 }}>Find Lost Items</h1>
                 <p style={{ marginTop: 6, opacity: 0.95 }}>Help reunite people with their lost belongings</p>
               </section>
 
               {/* Filter card */}
-              <section
-                style={{
-                  background: 'rgba(255,255,255,0.08)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 14,
-                  padding: 8,
-                  boxShadow: '0 6px 20px rgba(0,0,0,0.20)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
-                  marginBottom: 16,
-                }}
-              >
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  aria-label="Filter by category"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.18)',
-                    background: 'rgba(0,0,0,0.35)',
-                    color: '#fff',
-                    outline: 'none',
-                    cursor: 'pointer',
-                  }}
-                >
+              <section style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 8, marginBottom: 16 }}>
+                <select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Filter by category" style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', background: 'rgba(0,0,0,0.35)', color: '#fff', outline: 'none', cursor: 'pointer' }}>
                   <option>All</option>
                   <option>Electronics</option>
                   <option>Documents</option>
@@ -1470,83 +1388,22 @@ export default function Home() {
 
               {/* Results */}
               {filtered.length === 0 ? (
-                <div
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 14,
-                    padding: 28,
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.20)',
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexDirection: 'column',
-                    minHeight: 220,
-                  }}
-                >
+                <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', minHeight: 220 }}>
                   <div style={{ fontSize: 40, opacity: 0.6, marginBottom: 8 }}>🔍</div>
                   <div style={{ fontWeight: 700 }}>No items found</div>
                   <div style={{ opacity: 0.8, marginTop: 6 }}>Try adjusting your search or filters</div>
                 </div>
               ) : (
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                    gap: 16,
-                    paddingBottom: 40,
-                  }}
-                >
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16, paddingBottom: 40 }}>
                   {filtered.map((it, idx) => (
-                    <article
-                      key={it.id}
-                      style={{
-                        background: 'rgba(255,255,255,0.08)',
-                        border: '1px solid rgba(255,255,255,0.12)',
-                        borderRadius: 14,
-                        padding: 16,
-                        boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
-                        backdropFilter: 'blur(6px)',
-                        WebkitBackdropFilter: 'blur(6px)',
-                        transform: 'translateY(0px)',
-                        transition: 'transform 300ms ease, box-shadow 300ms ease, background 300ms ease',
-                        animation: 'fadeUp 500ms ease both',
-                        animationDelay: `${idx * 60}ms`,
-                      }}
-                      className="lost-card"
-                    >
+                    <article key={it.id} style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 14, padding: 16, boxShadow: '0 6px 18px rgba(0,0,0,0.18)' }} className="lost-card">
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>{it.title}</h3>
-                        <span style={{
-                          fontSize: 12,
-                          padding: '4px 10px',
-                          borderRadius: 999,
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          background: 'rgba(0,0,0,0.35)'
-                        }}>{it.category}</span>
+                        <span style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.2)', background: 'rgba(0,0,0,0.35)' }}>{it.category}</span>
                       </div>
                       <div style={{ opacity: 0.9, marginTop: 8 }}>{it.location}</div>
                       <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>{it.date}</div>
-                      <button
-                        onClick={() => setModalItem(it)}
-                        style={{
-                          marginTop: 12,
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          background: 'linear-gradient(135deg, rgba(79,70,229,0.8), rgba(168,85,247,0.8))',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          transition: 'filter 200ms ease',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1.0)')}
-                      >
-                        View details
-                      </button>
+                      <button onClick={() => setModalItem(it)} style={{ marginTop: 12, width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.22)', background: 'linear-gradient(135deg, rgba(79,70,229,0.8), rgba(168,85,247,0.8))', color: '#fff', cursor: 'pointer' }}>View details</button>
                     </article>
                   ))}
                 </div>
