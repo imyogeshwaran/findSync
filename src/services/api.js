@@ -3,7 +3,7 @@
 const API_URL = (
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
   (typeof window !== 'undefined' && window.__API_URL__) ||
-  '/api'
+  'http://localhost:5000/api'
 );
 // Store token in localStorage
 export const setAuthToken = (token) => {

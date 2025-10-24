@@ -92,7 +92,7 @@ exports.getAllMissingItems = async (req, res) => {
       image: item.image_url,
       date: item.date,
       ownerName: item.owner_name,
-      ownerPhone: item.phone,
+      ownerPhone: item.owner_phone,
       ownerLocation: item.location,
       status: item.status
     }));

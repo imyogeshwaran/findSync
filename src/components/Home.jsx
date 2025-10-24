@@ -730,7 +730,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
         <ul style={{ listStyle: 'none', display: 'flex', gap: '20px', margin: 0, padding: 0, alignItems: 'center' }}>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); }}>Home</a></li>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); }}>Explore</a></li>
-          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('find'); }}>Find</a></li>
+          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked'); onNavigate('find'); }}>Find</a></li>
           {user ? (
             <li style={{ position: 'relative' }}
                 onMouseEnter={() => setAccountOpen(true)}
@@ -802,7 +802,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); setMobileOpen(false); }}>Home</a>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); setMobileOpen(false); }}>Explore</a>
-            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('find'); setMobileOpen(false); }}>Find</a>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked (mobile)'); onNavigate('find'); setMobileOpen(false); }}>Find</a>
             {user ? (
               <details>
                 <summary style={{ cursor: 'pointer' }}>{user.displayName || 'Account'}</summary>
@@ -842,10 +842,10 @@ function ExploreSection({ userItems = [] }) {
 
   // Sample data with geo coords (approximate)
   const items = [
-    { id: 'e1', title: 'Silver Bracelet', description: 'Found near the fountain. Looks like a charm bracelet.', finder: 'Aisha M.', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop', location: 'Central Park', lat: 40.785091, lon: -73.968285, date: '2025-09-14', ownerName: 'Priya Sharma', ownerLocation: 'Upper West Side, NYC', ownerPhone: '+1 555-123-7788' },
-    { id: 'e2', title: 'Laptop Sleeve', description: 'Grey 13-inch sleeve with a sticker on it.', finder: 'Rahul S.', image: 'https://images.unsplash.com/photo-1457301547460-216da1913dc0?q=80&w=1200&auto=format&fit=crop', location: 'City Library', lat: 40.753182, lon: -73.982253, date: '2025-09-13', ownerName: 'Daniel Kim', ownerLocation: 'Midtown East, NYC', ownerPhone: '+1 555-987-4421' },
-    { id: 'e3', title: 'Sports Bottle', description: 'Blue bottle with name initials "KJ".', finder: 'Meera P.', image: 'https://images.unsplash.com/photo-1597481499750-3e6c4b532c9b?q=80&w=1200&auto=format&fit=crop', location: 'Riverside Walk', lat: 40.8, lon: -73.985, date: '2025-09-12', ownerName: 'Karan Joshi', ownerLocation: 'Harlem, NYC', ownerPhone: '+1 555-332-1144' },
-    { id: 'e4', title: 'Passport Cover', description: 'Brown leather cover, no passport inside.', finder: 'Liam T.', image: 'https://images.unsplash.com/photo-1544198365-3cdb2dc6b3ef?q=80&w=1200&auto=format&fit=crop', location: 'Airport T3', lat: 28.55616, lon: 77.100281, date: '2025-09-11', ownerName: 'Anita Rao', ownerLocation: 'Dwarka, New Delhi', ownerPhone: '+91 98765 43210' },
+    { id: 'sample-e1', title: 'Silver Bracelet', description: 'Found near the fountain. Looks like a charm bracelet.', finder: 'Aisha M.', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop', location: 'Central Park', lat: 40.785091, lon: -73.968285, date: '2025-09-14', ownerName: 'Priya Sharma', ownerLocation: 'Upper West Side, NYC', ownerPhone: '+1 555-123-7788' },
+    { id: 'sample-e2', title: 'Laptop Sleeve', description: 'Grey 13-inch sleeve with a sticker on it.', finder: 'Rahul S.', image: 'https://images.unsplash.com/photo-1457301547460-216da1913dc0?q=80&w=1200&auto=format&fit=crop', location: 'City Library', lat: 40.753182, lon: -73.982253, date: '2025-09-13', ownerName: 'Daniel Kim', ownerLocation: 'Midtown East, NYC', ownerPhone: '+1 555-987-4421' },
+    { id: 'sample-e3', title: 'Sports Bottle', description: 'Blue bottle with name initials "KJ".', finder: 'Meera P.', image: 'https://images.unsplash.com/photo-1597481499750-3e6c4b532c9b?q=80&w=1200&auto=format&fit=crop', location: 'Riverside Walk', lat: 40.8, lon: -73.985, date: '2025-09-12', ownerName: 'Karan Joshi', ownerLocation: 'Harlem, NYC', ownerPhone: '+1 555-332-1144' },
+    { id: 'sample-e4', title: 'Passport Cover', description: 'Brown leather cover, no passport inside.', finder: 'Liam T.', image: 'https://images.unsplash.com/photo-1544198365-3cdb2dc6b3ef?q=80&w=1200&auto=format&fit=crop', location: 'Airport T3', lat: 28.55616, lon: 77.100281, date: '2025-09-11', ownerName: 'Anita Rao', ownerLocation: 'Dwarka, New Delhi', ownerPhone: '+91 98765 43210' },
   ];
 
   const uniqueLocations = ['All', ...Array.from(new Set(items.map(i => i.location)))];
@@ -946,7 +946,7 @@ function ExploreSection({ userItems = [] }) {
       >
         {filtered.map((it, idx) => (
           <article
-            key={it.id}
+            key={it.id || `item-${idx}-${Date.now()}`}
             style={{
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.12)',
@@ -974,7 +974,7 @@ function ExploreSection({ userItems = [] }) {
                 Owner: <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-                📞 {it.ownerPhone}
+                📞 {it.ownerPhone || 'No phone provided'}
               </div>
               {it.finder && it.finder !== 'Missing Item' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
@@ -1185,6 +1185,11 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
   const [view, setView] = useState('explore'); // 'explore', 'find', or 'profile'
+  
+  // Debug: Log view changes
+  useEffect(() => {
+    console.log('🔄 Current view changed to:', view);
+  }, [view]);
   const [userItems, setUserItems] = useState([]); // User-submitted missing items (offline/local only)
   const [missingItems, setMissingItems] = useState([]); // Items fetched from backend
   const [showAddModal, setShowAddModal] = useState(false); // Control modal visibility
@@ -1197,24 +1202,32 @@ export default function Home() {
   // Fetch missing items from backend
   const fetchMissingItems = async () => {
     try {
+      console.log('🔄 Fetching missing items...');
       const res = await getAllMissingItems();
+      console.log('📦 API Response:', res);
       if (res && res.items) {
-        setMissingItems(res.items.map(it => ({
-          id: it.id,
-          title: it.title,
+        const mappedItems = res.items.map((it, index) => ({
+          id: it.item_id ? `api-${it.item_id}` : `missing-${index}-${Date.now()}`,
+          title: it.item_name,
           description: it.description,
           location: it.location,
-          date: it.date,
-          image: it.image || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
-          ownerName: it.ownerName,
+          date: new Date(it.posted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
+          image: it.image_url || 'https://share.google/images/RBfyrVF2BeKzIZv1O',
+          ownerName: it.owner_name || 'Unknown',
           ownerPhone: it.ownerPhone,
-          ownerLocation: it.ownerLocation,
+          ownerLocation: it.location,
           category: it.category || 'Others',
-          status: it.status
-        })));
+          status: it.status,
+          finder: 'Missing Item'
+        }));
+        console.log('✅ Mapped items:', mappedItems);
+        console.log('📱 Phone numbers check:', mappedItems.map(item => ({ title: item.title, phone: item.ownerPhone })));
+        setMissingItems(mappedItems);
+      } else {
+        console.log('⚠️ No items in response or invalid response structure');
       }
     } catch (err) {
-      console.error('Failed to fetch missing items:', err);
+      console.error('❌ Failed to fetch missing items:', err);
     }
   };
 
@@ -1260,6 +1273,15 @@ export default function Home() {
     const q = query.trim().toLowerCase();
     const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.location.toLowerCase().includes(q);
     return matchesCategory && matchesQuery;
+  });
+
+  // Debug: Log data for home page
+  console.log('🏠 Home page data:', {
+    missingItems: missingItems.length,
+    filtered: filtered.length,
+    category,
+    query,
+    view
   });
 
   // Handle submission of new missing item
@@ -1331,88 +1353,7 @@ export default function Home() {
       {/* Foreground content above background */}
       <main style={{ position: 'relative', zIndex: 1, paddingTop: 96, minHeight: 'calc(100vh - 96px)', paddingBottom: 40 }}>
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
-          {view === 'explore' ? (
-            <ExploreSection userItems={[...missingItems, ...userItems]} />
-          ) : view === 'find' ? (
-            <div style={{ padding: '20px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h1 style={{ fontSize: '2rem', margin: 0 }}>Find Missing Item</h1>
-                <button 
-                  onClick={() => setShowAddModal(true)}
-                  style={{
-                    padding: '12px 24px',
-                    borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
-                    border: 'none',
-                    color: 'white',
-                    fontSize: '1rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'transform 0.2s, opacity 0.2s',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.opacity = '0.9';
-                    e.currentTarget.style.transform = 'scale(1.05)';
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.opacity = '1';
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  <span style={{ fontSize: '1.2rem' }}>+</span> Post Missing Product
-                </button>
-              </div>
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '14px',
-                padding: '24px',
-                marginBottom: '24px'
-              }}>
-                <h2 style={{ marginTop: 0 }}>Search for your lost item</h2>
-                <p>If you've lost an item, please check the items listed in the Explore section or report a missing item using the "Post Missing Product" button above.</p>
-                <div style={{ marginTop: '20px' }}>
-                  <button 
-                    onClick={() => setView('explore')}
-                    style={{
-                      padding: '12px 24px',
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
-                      border: 'none',
-                      color: 'white',
-                      fontSize: '1rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'opacity 0.2s',
-                    }}
-                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
-                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
-                  >
-                    Browse Found Items
-                  </button>
-                </div>
-              </div>
-              <div style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.12)',
-                borderRadius: '14px',
-                padding: '24px',
-              }}>
-                <h3>Can't find your item?</h3>
-                <p>If you can't find your item in the found items list, you can:</p>
-                <ul style={{ paddingLeft: '20px' }}>
-                  <li>Check back later as new items are added regularly</li>
-                  <li>Use the search function to look for specific items</li>
-                  <li>Report your lost item using the + button</li>
-                </ul>
-              </div>
-            </div>
-          ) : view === 'profile' ? (
-            <ProfilePage user={user} />
-          ) : (
+          {view === 'home' ? (
             <div>
               {/* Hero banner */}
               <section
@@ -1499,7 +1440,7 @@ export default function Home() {
                 >
                   {filtered.map((it, idx) => (
                     <article
-                      key={it.id}
+                      key={it.id || `item-${idx}-${Date.now()}`}
                       style={{
                         background: 'rgba(255,255,255,0.08)',
                         border: '1px solid rgba(255,255,255,0.12)',
@@ -1523,34 +1464,123 @@ export default function Home() {
                           borderRadius: 999,
                           border: '1px solid rgba(255,255,255,0.2)',
                           background: 'rgba(0,0,0,0.35)'
-                        }}>{it.category}</span>
+                        }}>{it.location}</span>
                       </div>
-                      <div style={{ opacity: 0.9, marginTop: 8 }}>{it.location}</div>
-                      <div style={{ opacity: 0.7, fontSize: 12, marginTop: 6 }}>{it.date}</div>
-                      <button
-                        onClick={() => setModalItem(it)}
-                        style={{
-                          marginTop: 12,
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: 10,
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          background: 'linear-gradient(135deg, rgba(79,70,229,0.8), rgba(168,85,247,0.8))',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          transition: 'filter 200ms ease',
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.filter = 'brightness(1.08)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.filter = 'brightness(1.0)')}
-                      >
-                        View details
-                      </button>
+                      <p style={{ margin: '8px 0', opacity: 0.8, fontSize: '0.9rem', lineHeight: 1.4 }}>{it.description}</p>
+                      <div style={{ marginTop: 8, fontSize: '0.8rem', opacity: 0.9 }}>
+                        Owner: <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: '0.8rem', opacity: 0.9 }}>
+                        📞 {it.ownerPhone || 'No phone provided'}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                        <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>{it.date}</span>
+                        <button
+                          onClick={() => setModalItem(it)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                            color: 'white',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                        >
+                          View details
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>
               )}
             </div>
-          )}
+          ) : view === 'explore' ? (
+            <ExploreSection userItems={missingItems} />
+          ) : view === 'find' ? (
+            <div style={{ padding: '20px 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h1 style={{ fontSize: '2rem', margin: 0 }}>Find Missing Item</h1>
+                <button 
+                  onClick={() => setShowAddModal(true)}
+                  style={{
+                    padding: '12px 24px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s, opacity 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.opacity = '0.9';
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.opacity = '1';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <span style={{ fontSize: '1.2rem' }}>+</span> Post Missing Product
+                </button>
+              </div>
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '14px',
+                padding: '24px',
+                marginBottom: '24px'
+              }}>
+                <h2 style={{ marginTop: 0 }}>Search for your lost item</h2>
+                <p>If you've lost an item, please check the items listed in the Explore section or report a missing item using the "Post Missing Product" button above.</p>
+                <div style={{ marginTop: '20px' }}>
+                  <button 
+                    onClick={() => setView('explore')}
+                    style={{
+                      padding: '12px 24px',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontSize: '1rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'opacity 0.2s',
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
+                    onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+                  >
+                    Browse Found Items
+                  </button>
+                </div>
+              </div>
+              <div style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '14px',
+                padding: '24px',
+              }}>
+                <h3>Can't find your item?</h3>
+                <p>If you can't find your item in the found items list, you can:</p>
+                <ul style={{ paddingLeft: '20px' }}>
+                  <li>Check back later as new items are added regularly</li>
+                  <li>Use the search function to look for specific items</li>
+                  <li>Report your lost item using the + button</li>
+                </ul>
+              </div>
+            </div>
+          ) : view === 'profile' ? (
+            <ProfilePage user={user} />
+          ) : null}
         </div>
       </main>
 
