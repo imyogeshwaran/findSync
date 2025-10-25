@@ -13,4 +13,7 @@ router.get('/my-items', auth, itemController.getUserMissingItems);
 router.put('/missing/:id', auth, itemController.updateMissingItem);
 router.delete('/missing/:id', auth, itemController.deleteMissingItem);
 
+// Fix database issues
+router.get('/fix-post-types', itemController.fixPostTypes);
+
 module.exports = router;

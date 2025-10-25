@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken } from '../services/api.js';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes } from '../services/api.js';
+import FindView from './Find.jsx';
 
 // Success checkmark animation component
 const CheckmarkAnimation = () => (
@@ -114,6 +115,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
     description: '',
     location: '',
     mobile: '',
+    missingType: '',
+    category: '',
     image: null,
     preview: null
   });
@@ -121,10 +124,12 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    console.log(`=== Form field changed: ${name} = ${value} ===`);
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
+    console.log('Updated formData will be:', { ...formData, [name]: value });
   };
 
   const handleImageChange = (e) => {
@@ -144,6 +149,10 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('=== Modal handleSubmit - formData state ===', formData);
+    console.log('Modal formData.missingType:', formData.missingType);
+    console.log('Modal formData.category:', formData.category);
+    
     let payload;
     if (formData.image) {
       // If image is present, use FormData
@@ -153,7 +162,9 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       payload.append('location', formData.location);
       payload.append('mobile', formData.mobile);
       payload.append('image', formData.image);
-      payload.append('category', 'Others');
+      payload.append('category', formData.category);
+      payload.append('missingType', formData.missingType);
+      console.log('=== Sending FormData payload ===');
     } else {
       // Otherwise, use JSON
       payload = {
@@ -161,8 +172,10 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
         description: formData.description,
         location: formData.location,
         mobile: formData.mobile,
-        category: 'Others'
+        category: formData.category,
+        missingType: formData.missingType
       };
+      console.log('=== Sending JSON payload ===', payload);
     }
     await onSubmit(payload);
     // Reset form
@@ -171,6 +184,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       description: '',
       location: '',
       mobile: '',
+      missingType: '',
+      category: '',
       image: null,
       preview: null
     });
@@ -365,6 +380,74 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               }}
               placeholder="Your contact number"
             />
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Post Type
+            </label>
+            <select
+              name="missingType"
+              value={formData.missingType}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: formData.missingType ? '#fff' : 'rgba(255,255,255,0.5)',
+                fontSize: '1rem',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="" disabled>Select your post type</option>
+              <option value="lost">Lost</option>
+              <option value="found">Found</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Category
+            </label>
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: formData.category ? '#fff' : 'rgba(255,255,255,0.5)',
+                fontSize: '1rem',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="" disabled>Select your category</option>
+              <option value="Electronics Gadgets">Electronics Gadgets</option>
+              <option value="Documents">Documents</option>
+              <option value="Mobile Phone">Mobile Phone</option>
+              <option value="Other">Other</option>
+            </select>
           </div>
 
           <div style={{ marginBottom: '24px' }}>
@@ -913,8 +996,6 @@ function ExploreSection({ userItems = [] }) {
           padding: 8,
           boxShadow: '0 6px 20px rgba(0,0,0,0.20)',
           backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          marginBottom: 16,
         }}
       >
         <div style={{ position: 'relative' }}>
@@ -954,9 +1035,11 @@ function ExploreSection({ userItems = [] }) {
           alignItems: 'start',
         }}
       >
-        {filtered.map((it, idx) => (
+        {filtered.map((it, idx) => {
+          const key = it.id ?? `item-${idx}-${it.title ?? 'untitled'}`;
+          return (
           <article
-            key={it.id}
+            key={key}
             style={{
               background: 'rgba(255,255,255,0.08)',
               border: '1px solid rgba(255,255,255,0.12)',
@@ -981,7 +1064,7 @@ function ExploreSection({ userItems = [] }) {
                 {it.description}
               </p>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-                Owner: <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
+                <span style={{ fontWeight: 'bold' }}>{it.postType === 'found' ? 'Finder:' : 'Owner:'}</span> <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
                 📞 {it.ownerPhone}
@@ -997,12 +1080,37 @@ function ExploreSection({ userItems = [] }) {
                 </div>
               )}
               {it.finder === 'Missing Item' && (
-                <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: 13 }}>
-                  🔍 <strong>Missing Item</strong> - Owner looking for this
+                <div style={{ 
+                  marginTop: 10, 
+                  padding: '8px 12px', 
+                  background: it.postType === 'found' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                  border: it.postType === 'found' ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(239,68,68,0.3)', 
+                  borderRadius: '8px', 
+                  fontSize: 13,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{ 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    backgroundColor: it.postType === 'found' ? '#22c55e' : '#ef4444',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: '10px',
+                    marginRight: '2px'
+                  }}>
+                    {it.postType === 'found' ? '✓' : '🔍'}
+                  </span>
+                  <strong>{it.postType === 'found' ? 'Found Item' : 'Lost Item'}</strong> - {it.postType === 'found' ? 'Anyone looking for this' : 'Owner looking for this'}
                 </div>
               )}
               <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                Found at: {it.location}{it.distanceKm != null ? ` • ~${it.distanceKm} km away` : ''} • {it.date}
+                <span style={{ fontWeight: 'bold' }}>{it.postType === 'found' ? 'Found at:' : 'Lost at:'}</span> {it.location}{it.distanceKm != null ? ` • ~${it.distanceKm} km away` : ''} • {it.date}
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                 <button
@@ -1037,8 +1145,9 @@ function ExploreSection({ userItems = [] }) {
                 </button>
               </div>
             </div>
-          </article>
-        ))}
+            </article>
+          );
+        })}
       </div>
 
       {/* Detail modal */}
@@ -1048,7 +1157,7 @@ function ExploreSection({ userItems = [] }) {
           <div onClick={(e) => e.stopPropagation()} style={{ width: 'min(720px, 96vw)', background: 'rgba(17,17,17,0.9)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 14, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 0 }}>
               <div style={{ background: '#111', minHeight: 260 }}>
-                <img src={modalItem.image} alt={modalItem.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <img src={modalItem.image} alt={modalItem.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
               </div>
               <div style={{ padding: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
@@ -1056,7 +1165,9 @@ function ExploreSection({ userItems = [] }) {
                   <button onClick={() => setModalItem(null)} aria-label="Close"
                     style={{ border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
                 </div>
-                <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>{modalItem.description}</p>
+                <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>
+                  {modalItem.description}
+                </p>
                 <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
                   <div>Owner: <strong>{modalItem.ownerName}</strong></div>
                   <div>Owner location: <strong>{modalItem.ownerLocation}</strong></div>
@@ -1080,7 +1191,7 @@ function ExploreSection({ userItems = [] }) {
                 </div>
 
                 {modalItem.distanceKm != null && (
-                  <div style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
+                  <div key={modalItem.id} style={{ marginTop: 10, fontSize: 12, opacity: 0.8 }}>
                     Approx. distance from you: ~{modalItem.distanceKm} km
                   </div>
                 )}
@@ -1208,20 +1319,28 @@ export default function Home() {
   const fetchMissingItems = async () => {
     try {
       const res = await getAllMissingItems();
+      console.log('Backend response:', res);
       if (res && res.items) {
-        setMissingItems(res.items.map(it => ({
-          id: it.id,
-          title: it.name,
-          description: it.description,
-          location: it.location,
-          date: new Date(it.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-          image: it.image_url || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
-          ownerName: it.owner_name || 'Unknown',
-          ownerPhone: it.mobile,
-          ownerLocation: it.location,
-          finder: 'Missing Item',
-          category: it.category || 'Others'
-        })));
+        const mappedItems = res.items.map(it => {
+          console.log('Raw item from backend:', it);
+          const mapped = {
+            id: it.id,
+            title: it.title || it.item_name || it.name,
+            description: it.description,
+            location: it.location,
+            date: it.date || (it.posted_at ? new Date(it.posted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }) : 'N/A'),
+            image: it.image || it.image_url || 'https://share.google/images/5RQfBinTTl7vaFJK3',
+            ownerName: it.ownerName || it.owner_name || 'Unknown',
+            ownerPhone: it.ownerPhone || it.owner_phone || it.phone || it.mobile,
+            ownerLocation: it.ownerLocation || it.location,
+            finder: 'Missing Item',
+            category: it.category || 'Others',
+            postType: it.post_type || 'lost'
+          };
+          console.log('Mapped item - Final postType:', mapped.postType, '| Title:', mapped.title);
+          return mapped;
+        });
+        setMissingItems(mappedItems);
       }
     } catch (err) {
       console.error('Failed to fetch missing items:', err);
@@ -1239,9 +1358,9 @@ export default function Home() {
       if (currentUser) {
         try {
           await syncUserToBackend(currentUser);
-          console.log('✅ User synced on auth state change');
+          console.log('✅ User synced to backend successfully');
         } catch (error) {
-          console.error('Failed to sync user:', error);
+          console.error('Failed to sync user to backend:', error);
         }
       } else {
         // Clear auth token when logged out
@@ -1274,15 +1393,33 @@ export default function Home() {
     { id: 4, title: 'Passport', category: 'Documents', location: 'Airport T3', date: '2025-09-14' },
   ];
 
-  // Combine items with user-submitted items for home page display
-  const allDisplayItems = [...items, ...userItems.map(item => ({
-    id: item.id,
-    title: item.name,
-    category: item.category || 'Others',
-    location: item.location,
-    date: item.date
-  }))];
+  // Combine items with user-submitted items and backend missing items for home page display
+  const allDisplayItems = [
+    ...items, 
+    ...missingItems,
+    ...userItems.map(item => ({
+      id: item.id,
+      title: item.name || item.title,
+      category: item.category || 'Others',
+      location: item.location,
+      date: item.date
+    }))
+  ];
 
+  // Function to fix post types
+  const handleFixPostTypes = async () => {
+    try {
+      console.log('Fixing post types...');
+      const result = await fixPostTypes();
+      console.log('Fix result:', result);
+      alert(`Fixed ${result.fixed_items_count} items! Please refresh the page.`);
+      await fetchMissingItems(); // Refresh the list
+    } catch (error) {
+      console.error('Error fixing post types:', error);
+      alert('Error fixing post types. See console for details.');
+    }
+  };
+  
   const filtered = allDisplayItems.filter((it) => {
     const matchesCategory = category === 'All' || it.category === category;
     const q = query.trim().toLowerCase();
@@ -1294,22 +1431,35 @@ export default function Home() {
   const handleAddItem = async (formData) => {
     setIsSubmitting(true);
 
-    // Validation: Ensure name and location are provided
-    if (!formData.name || !formData.location) {
-      alert('Please provide both the item name and location.');
+    console.log('=== handleAddItem received formData ===', formData);
+    console.log('formData.missingType:', formData.missingType);
+    console.log('formData.category:', formData.category);
+    
+    // Store the submission type in localStorage to help identify recent submissions
+    localStorage.setItem('lastSubmittedType', formData.missingType || 'lost');
+
+    // Validation: Ensure required fields are provided
+    if (!formData.name || !formData.location || !formData.missingType || !formData.category) {
+      alert('Please fill in all required fields.');
       setIsSubmitting(false);
       return;
     }
 
+    console.log('Submitting item:', formData);
+
     try {
-      await createMissingItem({
-        name: formData.name,
+      const payload = {
+        item_name: formData.name,
         description: formData.description,
         location: formData.location,
-        mobile: formData.mobile,
+        phone: formData.mobile,
         image_url: formData.preview,
-        category: formData.category || 'Others'
-      });
+        category: formData.category || 'Others',
+        post_type: formData.missingType || 'lost'
+      };
+      console.log('Submitting payload to backend:', payload);
+      const response = await createMissingItem(payload);
+      console.log('Item created response:', response);
       // Show success animation
       setShowSuccess(true);
       // Refresh list from backend
@@ -1327,14 +1477,16 @@ export default function Home() {
         title: formData.name,
         description: formData.description,
         location: formData.location,
-        image: formData.preview || 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
+        image: formData.preview || 'https://share.google/images/5RQfBinTTl7vaFJK3',
         date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
         ownerName: 'You',
         ownerLocation: formData.location,
         ownerPhone: formData.mobile,
         finder: 'Missing Item',
-        category: formData.category || 'Others'
+        category: formData.category || 'Others',
+        postType: formData.missingType || 'lost'
       };
+      console.log('Adding item to local state:', newItem);
       setUserItems(prev => [newItem, ...prev]);
       setShowAddModal(false);
     } finally {
@@ -1360,6 +1512,8 @@ export default function Home() {
 
       {/* Foreground content above background */}
       <main style={{ position: 'relative', zIndex: 1, paddingTop: 96, minHeight: 'calc(100vh - 96px)', paddingBottom: 40 }}>
+        {/* Removed Fix Database button */}
+        
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
             <ExploreSection userItems={[...missingItems, ...userItems]} onViewItem={(it) => setModalItem(it)} />
@@ -1447,12 +1601,40 @@ export default function Home() {
                 <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>
                   {modalItem.description || 'No description available.'}
                 </p>
-                <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
+                {/* Badge showing post type with appropriate color */}
+                <div style={{ 
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: 10,
+                  padding: '6px 12px', 
+                  background: modalItem.postType === 'found' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                  border: modalItem.postType === 'found' ? '1px solid rgba(34,197,94,0.3)' : '1px solid rgba(239,68,68,0.3)',
+                  borderRadius: '8px',
+                }}>
+                  <span style={{ 
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: modalItem.postType === 'found' ? '#22c55e' : '#ef4444',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    fontSize: '12px'
+                  }}>
+                    {modalItem.postType === 'found' ? '✓' : '🔍'}
+                  </span>
+                  <strong>{modalItem.postType === 'found' ? 'Found Item - Anyone looking for this' : 'Lost Item - Owner looking for this'}</strong>
+                </div>
+                
+                <div style={{ marginTop: 16, fontSize: 14, opacity: 0.9 }}>
                   <div>Category: <strong>{modalItem.category || 'Not specified'}</strong></div>
-                  <div>Location: <strong>{modalItem.location || 'Not specified'}</strong></div>
+                  <div><b>{modalItem.postType === 'found' ? 'Found at:' : 'Lost at:'}</b> <strong>{modalItem.location || 'Not specified'}</strong></div>
                   <div>Date: <strong>{modalItem.date || 'Not specified'}</strong></div>
                   {modalItem.ownerName && (
-                    <div>Owner: <strong>{modalItem.ownerName}</strong></div>
+                    <div><b>{modalItem.postType === 'found' ? 'Finder:' : 'Owner:'}</b> <strong>{modalItem.ownerName}</strong></div>
                   )}
                   {modalItem.ownerPhone && (
                     <div>Contact: <strong>{modalItem.ownerPhone}</strong></div>
@@ -1462,7 +1644,7 @@ export default function Home() {
                 {(modalItem.ownerPhone && modalItem.ownerName) && (
                   <div style={{ marginTop: 14, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                     <a 
-                      href={`tel:${modalItem.ownerPhone.replace(/\s/g, '')}`}
+                      href={`tel:${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/\s/g, '') : '')}`}
                       style={{ 
                         padding: '10px 12px', 
                         borderRadius: 10, 
@@ -1473,7 +1655,7 @@ export default function Home() {
                         fontSize: '0.9rem'
                       }}
                     >
-                      📞 Call Owner
+                      📞 Call {modalItem.postType === 'found' ? 'Finder' : 'Owner'}
                     </a>
                     <button
                       onClick={async () => { 
@@ -1498,7 +1680,7 @@ export default function Home() {
                       📋 Copy Phone
                     </button>
                     <a 
-                      href={`https://wa.me/${modalItem.ownerPhone.replace(/[^\d]/g, '')}?text=Hi%2C%20I%20saw%20your%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} 
+                      href={`https://wa.me/${(modalItem && modalItem.ownerPhone ? modalItem.ownerPhone.replace(/[^\d]/g, '') : '')}?text=Hi%2C%20I%20saw%20your%20lost%20item%20on%20FindSync%20and%20would%20like%20to%20connect.`} 
                       target="_blank" 
                       rel="noreferrer"
                       style={{ 

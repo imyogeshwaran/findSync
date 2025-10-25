@@ -82,10 +82,13 @@ export const getUserProfile = async () => {
 
 // Item API calls
 export const createMissingItem = async (itemData) => {
+  console.log('=== API createMissingItem called with ===', itemData);
+  console.log('itemData.post_type:', itemData.post_type);
   const response = await apiRequest('/items/missing', {
     method: 'POST',
     body: JSON.stringify(itemData),
   });
+  console.log('=== API response ===', response);
   
   // Transform response to match frontend expectations
   if (response.item) {
@@ -162,5 +165,15 @@ export const getUserMissingItems = async () => {
     // fallback: request items and let frontend filter if necessary
     const res = await getAllItems();
     return res;
+  }
+};
+
+// Database fix utilities
+export const fixPostTypes = async () => {
+  try {
+    return await apiRequest('/items/fix-post-types');
+  } catch (err) {
+    console.error('Error fixing post types:', err);
+    throw err;
   }
 };

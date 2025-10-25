@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS Items (
     item_name VARCHAR(100) NOT NULL,
     description TEXT,
     category VARCHAR(50),
-    post_type ENUM('lost', 'found') NOT NULL,
+    post_type ENUM('lost', 'found') NOT NULL DEFAULT 'lost',
     phone VARCHAR(15) DEFAULT NULL,
     location VARCHAR(100) NOT NULL,
     image_url VARCHAR(255),
