@@ -1,6 +1,6 @@
 const db = require('../config/database');
 
-// Create a new missing item with special handling for post_type
+// Create a new missing item with proper post_type handling
 exports.createMissingItem = async (req, res) => {
   try {
     console.log('Request received at:', new Date().toISOString());
@@ -32,6 +32,14 @@ exports.createMissingItem = async (req, res) => {
       userId: userId || '(missing)'
     });
     console.log('==========================================');
+    console.log('DETAILED POST_TYPE ANALYSIS:');
+    console.log('post_type value:', post_type);
+    console.log('post_type type:', typeof post_type);
+    console.log('post_type === "found":', post_type === 'found');
+    console.log('post_type === "lost":', post_type === 'lost');
+    console.log('post_type == "found":', post_type == 'found');
+    console.log('post_type == "lost":', post_type == 'lost');
+    console.log('==========================================');
     
     // Validate required fields per schema
     const missingFields = [];
@@ -45,9 +53,17 @@ exports.createMissingItem = async (req, res) => {
       });
     }
     
-    const insertValues = [userId, item_name, description, location, image_url, category || 'Others', post_type, phone];
+    // Ensure post_type is valid, default to 'lost' if not provided or invalid
+    const validPostType = (post_type === 'found' || post_type === 'lost') ? post_type : 'lost';
+    console.log('=== POST_TYPE VALIDATION ===');
+    console.log('Original post_type from request:', post_type);
+    console.log('Type of post_type:', typeof post_type);
+    console.log('Validated post_type:', validPostType);
+    console.log('==========================================');
+    
+    const insertValues = [userId, item_name, description, location, image_url, category || 'Others', validPostType, phone];
     console.log('=== INSERTING INTO DATABASE ===');
-    console.log('post_type value being inserted:', post_type);
+    console.log('post_type value being inserted:', validPostType);
     console.log('Full insert values:', insertValues);
     
     const [result] = await db.query(
@@ -79,7 +95,7 @@ exports.createMissingItem = async (req, res) => {
         location,
         image_url,
         category: category || 'Others',
-        post_type,
+        post_type: validPostType,
         phone
       }
     });
@@ -112,67 +128,6 @@ async function checkPostTypeEnum() {
 // Call the check function when server starts
 checkPostTypeEnum();
 
-// Fix database schema and entries
-async function fixDatabaseSchema() {
-  try {
-    console.log('Attempting to fix database schema for post_type...');
-    
-    // 1. Ensure the post_type column allows NULL value (no default)
-    await db.query(`ALTER TABLE Items MODIFY COLUMN post_type ENUM('lost', 'found') NULL`);
-    console.log('Updated post_type column to allow NULL values');
-    
-    // 2. Drop any DEFAULT value
-    await db.query(`ALTER TABLE Items ALTER COLUMN post_type DROP DEFAULT`);
-    console.log('Removed default value from post_type column');
-    
-    // Create a trigger that ensures 'found' items stay 'found'
-    // First drop the trigger if it exists
-    try {
-      await db.query(`DROP TRIGGER IF EXISTS ensure_post_type`);
-      console.log('Dropped existing trigger');
-    } catch (err) {
-      console.log('Error dropping trigger:', err.message);
-    }
-    
-    // Then create the new trigger
-    try {
-      await db.query(`
-        CREATE TRIGGER ensure_post_type
-        BEFORE UPDATE ON Items
-        FOR EACH ROW
-        BEGIN
-          IF NEW.post_type != OLD.post_type AND OLD.post_type = 'found' THEN
-            SET NEW.post_type = 'found';
-          END IF;
-        END
-      `);
-      console.log('Created new trigger successfully');
-    } catch (err) {
-      console.log('Error creating trigger:', err.message);
-    }
-    console.log('Created trigger to preserve "found" values');
-    
-    // 4. Update any items with 'found' in their description to have post_type='found'
-    const [result] = await db.query(`
-      UPDATE Items 
-      SET post_type = 'found' 
-      WHERE 
-        (LOWER(description) LIKE '%found%' OR 
-         LOWER(item_name) LIKE '%found%') AND 
-        posted_at > NOW() - INTERVAL 7 DAY
-    `);
-    
-    console.log(`Updated ${result.affectedRows} items to have post_type='found'`);
-    
-    console.log('Database schema fixed successfully!');
-  } catch (error) {
-    console.error('Error fixing database schema:', error);
-  }
-}
-
-// Call the fix function when server starts
-fixDatabaseSchema();
-
 // Get all missing items
 exports.getAllMissingItems = async (req, res) => {
   try {
@@ -192,24 +147,6 @@ exports.getAllMissingItems = async (req, res) => {
     // Transform the items to match frontend expectations
     const transformedItems = items.map(item => {
       console.log('Backend transforming item:', item.item_name, 'post_type:', item.post_type);
-      // CRITICAL FIX: Override post_type for specific items
-      // This is a temporary workaround until database issue is fixed
-      let finalPostType = item.post_type;
-      
-      // Check item description or name to identify "found" items
-    
-      
-      // If this is a very recent item, force it to be "found" instead of "lost"
-      const isRecentItem = new Date(item.posted_at).getTime() > Date.now() - (24 * 60 * 60 * 1000); // Last 24 hours
-      if (isRecentItem) {
-        for (const keyword of knownFoundItems) {
-          if (itemText.includes(keyword)) {
-            finalPostType = 'found';
-            console.log(`OVERRIDE: Setting post_type to "found" for item: ${item.item_name}`);
-            break;
-          }
-        }
-      }
       
       return {
         id: item.item_id,
@@ -223,7 +160,7 @@ exports.getAllMissingItems = async (req, res) => {
         ownerPhone: item.owner_phone,
         ownerLocation: item.location,
         status: item.status,
-        postType: finalPostType
+        post_type: item.post_type // Use the actual post_type from database
       };
     });
     console.log('Backend sending transformed items count:', transformedItems.length);
@@ -281,39 +218,10 @@ exports.getMissingItemById = async (req, res) => {
 // Manual fix endpoint to fix all post_type values
 exports.fixPostTypes = async (req, res) => {
   try {
-    // Fix post_type for items with 'found' in description or item_name
-    const [result1] = await db.query(`
-      UPDATE Items 
-      SET post_type = 'found' 
-      WHERE 
-        (LOWER(description) LIKE '%found%' OR 
-         LOWER(item_name) LIKE '%found%')
-    `);
-    
-    // Fix very recent items (last 24 hours) based on recent activity
-    const [result2] = await db.query(`
-      UPDATE Items 
-      SET post_type = 'found' 
-      WHERE 
-        posted_at > NOW() - INTERVAL 24 HOUR AND
-        post_type = 'lost'
-    `);
-    
-    // Update specific known item IDs (add your specific IDs here)
-    const knownFoundItemIds = [112, 113, 114, 115, 116, 117, 118]; // Add IDs of items that should be 'found'
-    
-    if (knownFoundItemIds.length > 0) {
-      const [result3] = await db.query(
-        `UPDATE Items SET post_type = 'found' WHERE item_id IN (?)`,
-        [knownFoundItemIds]
-      );
-      console.log(`Updated ${result3.affectedRows} specific items to 'found'`);
-    }
-    
     res.json({
       success: true,
-      message: 'Database post_type values fixed',
-      fixed_items_count: (result1.affectedRows + result2.affectedRows)
+      message: 'Post type handling has been simplified - no manual fixes needed',
+      fixed_items_count: 0
     });
   } catch (error) {
     console.error('Error fixing post_type values:', error);

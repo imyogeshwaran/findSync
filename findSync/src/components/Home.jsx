@@ -207,7 +207,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       justifyContent: 'center',
       zIndex: 1000,
       backdropFilter: 'blur(5px)',
-    }} onClick={onClose}>
+      pointerEvents: isSubmitting ? 'none' : 'auto',
+    }} onClick={isSubmitting ? undefined : onClose}>
       <div style={{
         backgroundColor: 'transparent',
         padding: '24px',
@@ -221,17 +222,18 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 700 }}>Report Missing Item</h2>
           <button 
-            onClick={onClose}
+            onClick={isSubmitting ? undefined : onClose}
+            disabled={isSubmitting}
             style={{
               background: 'none',
               backgroundColor: 'transparent',
               border: 'none',
               outline: 'none',
               boxShadow: 'none',
-              color: '#fff',
+              color: isSubmitting ? '#6b7280' : '#fff',
               fontSize: '3rem',
-              cursor: 'pointer',
-              opacity: 0.9,
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              opacity: isSubmitting ? 0.5 : 0.9,
               lineHeight: 1,
               padding: 0,
               margin: 0,
@@ -243,16 +245,20 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               transition: 'opacity 0.2s ease, transform 0.2s ease',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '1';
-              e.currentTarget.style.transform = 'scale(1.1)';
-              e.currentTarget.style.background = 'none';
-              e.currentTarget.style.backgroundColor = 'transparent';
+              if (!isSubmitting) {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.transform = 'scale(1.1)';
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '0.9';
-              e.currentTarget.style.transform = 'scale(1)';
-              e.currentTarget.style.background = 'none';
-              e.currentTarget.style.backgroundColor = 'transparent';
+              if (!isSubmitting) {
+                e.currentTarget.style.opacity = '0.9';
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.background = 'none';
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
             }}
           >
             &times;
@@ -276,15 +282,17 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               value={formData.name}
               onChange={handleChange}
               required
+              disabled={isSubmitting}
               style={{
                 width: '100%',
                 padding: '12px 16px',
                 borderRadius: '10px',
                 border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: '#fff',
+                background: isSubmitting ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.35)',
+                color: isSubmitting ? '#6b7280' : '#fff',
                 fontSize: '1rem',
                 outline: 'none',
+                cursor: isSubmitting ? 'not-allowed' : 'text',
               }}
               placeholder="Enter item name"
             />
@@ -397,16 +405,17 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               value={formData.missingType}
               onChange={handleChange}
               required
+              disabled={isSubmitting}
               style={{
                 width: '100%',
                 padding: '12px 16px',
                 borderRadius: '10px',
                 border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: formData.missingType ? '#fff' : 'rgba(255,255,255,0.5)',
+                background: isSubmitting ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.35)',
+                color: isSubmitting ? '#6b7280' : (formData.missingType ? '#fff' : 'rgba(255,255,255,0.5)'),
                 fontSize: '1rem',
                 outline: 'none',
-                cursor: 'pointer'
+                cursor: isSubmitting ? 'not-allowed' : 'pointer'
               }}
             >
               <option value="" disabled>Select your post type</option>
@@ -446,6 +455,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               <option value="Electronics Gadgets">Electronics Gadgets</option>
               <option value="Documents">Documents</option>
               <option value="Mobile Phone">Mobile Phone</option>
+              <option value="Accessories">Accessories</option>
+              <option value="Stationery">Stationery</option>
               <option value="Other">Other</option>
             </select>
           </div>
@@ -496,22 +507,43 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
 
           <button
             type="submit"
+            disabled={isSubmitting}
             style={{
               width: '100%',
               padding: '14px',
               borderRadius: '10px',
               border: 'none',
-              background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+              background: isSubmitting 
+                ? 'linear-gradient(135deg, #6b7280 0%, #9ca3af 100%)' 
+                : 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
               color: 'white',
               fontSize: '1rem',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
               transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
             }}
-            onMouseOver={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseOut={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseOver={(e) => !isSubmitting && (e.currentTarget.style.opacity = '0.9')}
+            onMouseOut={(e) => !isSubmitting && (e.currentTarget.style.opacity = '1')}
           >
-            Submit Report
+            {isSubmitting ? (
+              <>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTop: '2px solid #ffffff',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                Posting...
+              </>
+            ) : (
+              'Submit Report'
+            )}
           </button>
         </form>
       </div>
@@ -934,12 +966,7 @@ function ExploreSection({ userItems = [] }) {
   const [modalItem, setModalItem] = useState(null);
 
   // Sample data with geo coords (approximate)
-  const items = [
-    { id: 'e1', title: 'Silver Bracelet', description: 'Found near the fountain. Looks like a charm bracelet.', finder: 'Aisha M.', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop', location: 'Central Park', lat: 40.785091, lon: -73.968285, date: '2025-09-14', ownerName: 'Priya Sharma', ownerLocation: 'Upper West Side, NYC', ownerPhone: '+1 555-123-7788' },
-    { id: 'e2', title: 'Laptop Sleeve', description: 'Grey 13-inch sleeve with a sticker on it.', finder: 'Rahul S.', image: 'https://images.unsplash.com/photo-1457301547460-216da1913dc0?q=80&w=1200&auto=format&fit=crop', location: 'City Library', lat: 40.753182, lon: -73.982253, date: '2025-09-13', ownerName: 'Daniel Kim', ownerLocation: 'Midtown East, NYC', ownerPhone: '+1 555-987-4421' },
-    { id: 'e3', title: 'Sports Bottle', description: 'Blue bottle with name initials "KJ".', finder: 'Meera P.', image: 'https://images.unsplash.com/photo-1597481499750-3e6c4b532c9b?q=80&w=1200&auto=format&fit=crop', location: 'Riverside Walk', lat: 40.8, lon: -73.985, date: '2025-09-12', ownerName: 'Karan Joshi', ownerLocation: 'Harlem, NYC', ownerPhone: '+1 555-332-1144' },
-    { id: 'e4', title: 'Passport Cover', description: 'Brown leather cover, no passport inside.', finder: 'Liam T.', image: 'https://images.unsplash.com/photo-1544198365-3cdb2dc6b3ef?q=80&w=1200&auto=format&fit=crop', location: 'Airport T3', lat: 28.55616, lon: 77.100281, date: '2025-09-11', ownerName: 'Anita Rao', ownerLocation: 'Dwarka, New Delhi', ownerPhone: '+91 98765 43210' },
-  ];
+  const items = [];
 
   const uniqueLocations = ['All', ...Array.from(new Set(items.map(i => i.location)))];
 
@@ -1314,15 +1341,19 @@ export default function Home() {
   const [user, setUser] = useState(null); // Current authenticated user
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
 
   // Fetch missing items from backend
   const fetchMissingItems = async () => {
     try {
+      console.log('fetchMissingItems called - fetching from backend...');
       const res = await getAllMissingItems();
       console.log('Backend response:', res);
       if (res && res.items) {
+        console.log('Processing', res.items.length, 'items from backend');
         const mappedItems = res.items.map(it => {
           console.log('Raw item from backend:', it);
+          console.log('Backend post_type value:', it.post_type);
           const mapped = {
             id: it.id,
             title: it.title || it.item_name || it.name,
@@ -1335,12 +1366,15 @@ export default function Home() {
             ownerLocation: it.ownerLocation || it.location,
             finder: 'Missing Item',
             category: it.category || 'Others',
-            postType: it.post_type || 'lost'
+            postType: it.post_type // Use the exact value from backend, no fallback
           };
           console.log('Mapped item - Final postType:', mapped.postType, '| Title:', mapped.title);
           return mapped;
         });
+        console.log('Setting missing items state with', mappedItems.length, 'items');
         setMissingItems(mappedItems);
+        setRefreshKey(prev => prev + 1); // Force refresh
+        console.log('Missing items state updated successfully');
       }
     } catch (err) {
       console.error('Failed to fetch missing items:', err);
@@ -1386,12 +1420,7 @@ export default function Home() {
   };
 
   // Placeholder items for browsing; replace with real data later
-  const items = [
-    { id: 1, title: 'Black Wallet', category: 'Accessories', location: 'Central Park', date: '2025-09-10' },
-    { id: 2, title: 'iPhone 13', category: 'Electronics', location: 'City Library', date: '2025-09-12' },
-    { id: 3, title: 'Blue Backpack', category: 'Accessories', location: 'Bus Station', date: '2025-09-13' },
-    { id: 4, title: 'Passport', category: 'Documents', location: 'Airport T3', date: '2025-09-14' },
-  ];
+  const items = [];
 
   // Combine items with user-submitted items and backend missing items for home page display
   const allDisplayItems = [
@@ -1462,8 +1491,13 @@ export default function Home() {
       console.log('Item created response:', response);
       // Show success animation
       setShowSuccess(true);
-      // Refresh list from backend
-      await fetchMissingItems();
+      // Small delay to ensure backend has processed the item
+      setTimeout(async () => {
+        // Refresh list from backend
+        console.log('Refreshing missing items after successful post...');
+        await fetchMissingItems();
+        console.log('Missing items refreshed successfully');
+      }, 500);
       // Hide success after 2 seconds and close modal
       setTimeout(() => {
         setShowSuccess(false);
@@ -1516,7 +1550,7 @@ export default function Home() {
         
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
-            <ExploreSection userItems={[...missingItems, ...userItems]} onViewItem={(it) => setModalItem(it)} />
+            <ExploreSection key={refreshKey} userItems={[...missingItems, ...userItems]} onViewItem={(it) => setModalItem(it)} />
           ) : view === 'find' ? (
             <FindView onPostClick={() => setShowAddModal(true)} onBrowseClick={() => setView('explore')} />
           ) : view === 'profile' ? (
@@ -1536,6 +1570,7 @@ export default function Home() {
                   <option>Electronics</option>
                   <option>Documents</option>
                   <option>Accessories</option>
+                  <option>Stationery</option>
                   <option>Others</option>
                 </select>
               </section>

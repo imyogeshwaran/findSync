@@ -1,32 +1,34 @@
 @echo off
-echo =============================================
-echo FindSync Post Type Fix Utility
-echo =============================================
-echo This script will fix the post_type values in the database
-echo and ensure that "found" items display correctly.
+echo Fixing post_type column in database...
 echo.
 
-echo Updating database schema...
-mysql -u root -p < server\config\fix_post_types.sql
-
-echo.
-echo Database schema updated.
-echo.
-echo Starting backend server...
 cd server
-start cmd /k "node server.js"
-cd ..
-echo.
-echo Starting frontend server...
-cd findSync
-start cmd /k "npm start"
-echo.
-echo =============================================
-echo DONE! Both servers are now running.
-echo.
-echo 1. Look for the "Fix Database" button at the top of the page
-echo 2. Click it to apply fixes to existing items
-echo 3. Try creating a new "found" item - it should work correctly now
-echo =============================================
+node -e "
+const db = require('./config/database');
 
+async function fixPostTypeColumn() {
+  try {
+    console.log('Removing default value from post_type column...');
+    await db.query('ALTER TABLE Items ALTER COLUMN post_type DROP DEFAULT');
+    console.log('✅ Successfully removed default value from post_type column');
+    
+    console.log('Verifying column definition...');
+    const [columns] = await db.query('SHOW COLUMNS FROM Items WHERE Field = \"post_type\"');
+    if (columns.length > 0) {
+      console.log('Column definition:', columns[0]);
+    }
+    
+    console.log('✅ Database fix completed successfully!');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error fixing database:', error.message);
+    process.exit(1);
+  }
+}
+
+fixPostTypeColumn();
+"
+
+echo.
+echo Database fix completed!
 pause
