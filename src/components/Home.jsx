@@ -1467,8 +1467,27 @@ export default function Home() {
                         }}>{it.location}</span>
                       </div>
                       <p style={{ margin: '8px 0', opacity: 0.8, fontSize: '0.9rem', lineHeight: 1.4 }}>{it.description}</p>
+                      {/* Badge showing post type with appropriate color */}
+                      <div style={{ 
+                        marginTop: 10,
+                        padding: '8px 12px',
+                        background: it.postType === 'found' ? '#22c55e' : '#ef4444',
+                        borderRadius: '8px',
+                        fontSize: '0.85rem',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <span style={{ fontSize: '1rem' }}>
+                          {it.postType === 'found' ? '✓' : '🔍'}
+                        </span>
+                        {it.postType === 'found' ? 'Found Item - Anyone looking for this' : 'Lost Item - Owner looking for this'}
+                      </div>
+                      
                       <div style={{ marginTop: 8, fontSize: '0.8rem', opacity: 0.9 }}>
-                        Owner: <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
+                        <strong>{it.postType === 'found' ? 'Finder:' : 'Owner:'}</strong> {it.ownerName} • 
+                        <strong>{it.postType === 'found' ? 'Found at:' : 'Lost at:'}</strong> {it.ownerLocation}
                       </div>
                       <div style={{ marginTop: 4, fontSize: '0.8rem', opacity: 0.9 }}>
                         📞 {it.ownerPhone || 'No phone provided'}

@@ -17,9 +17,31 @@ exports.createMissingItem = async (req, res) => {
     console.log('Raw request body:', typeof req.body, req.body);
     console.log('==========================================');
     
-    const { item_name, description, location, image_url, category, phone, post_type } = req.body;
-    const userId = req.user.id;
-    
+    // Extract incoming fields
+    let { item_name, description, location, image_url, category, phone, post_type, finder_name } = req.body;
+
+    // Resolve user id: prefer req.user.id (if token contains internal id),
+    // otherwise lookup or create a Users row using firebase_uid from token.
+    let userId = req.user && req.user.id;
+    const firebaseUid = req.user && req.user.firebase_uid;
+    const tokenName = req.user && (req.user.name || req.user.displayName || null);
+
+    if ((!userId || userId === null) && firebaseUid) {
+      try {
+        const [users] = await db.query('SELECT user_id, name FROM Users WHERE firebase_uid = ?', [firebaseUid]);
+        if (users && users.length > 0) {
+          userId = users[0].user_id;
+          if (!finder_name) finder_name = users[0].name || finder_name;
+        } else {
+          const [r] = await db.query('INSERT INTO Users (firebase_uid, email, name) VALUES (?, ?, ?)', [firebaseUid, req.user.email || null, tokenName || null]);
+          userId = r.insertId;
+          if (!finder_name) finder_name = tokenName || finder_name;
+        }
+      } catch (err) {
+        console.error('Error resolving user from firebase_uid:', err.message);
+      }
+    }
+
     console.log('==========================================');
     console.log('Extracted fields:', {
       item_name: item_name || '(missing)',
@@ -29,6 +51,7 @@ exports.createMissingItem = async (req, res) => {
       category: category || '(missing)',
       phone: phone || '(missing)',
       post_type: post_type || '(missing)',
+      finder_name: finder_name || '(missing)',
       userId: userId || '(missing)'
     });
     console.log('==========================================');
@@ -61,17 +84,42 @@ exports.createMissingItem = async (req, res) => {
     console.log('Validated post_type:', validPostType);
     console.log('==========================================');
     
-    const insertValues = [userId, item_name, description, location, image_url, category || 'Others', validPostType, phone];
+    // Ensure we have a userId before inserting
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: user id could not be resolved' });
+    }
+
     console.log('=== INSERTING INTO DATABASE ===');
     console.log('post_type value being inserted:', validPostType);
-    console.log('Full insert values:', insertValues);
-    
-    const [result] = await db.query(
-      `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      insertValues
-    );
-    
+
+    // Detect whether the Items table has a finder_name column
+    let includeFinder = false;
+    try {
+      const [foundCols] = await db.query("SHOW COLUMNS FROM Items LIKE 'finder_name'");
+      includeFinder = foundCols && foundCols.length > 0;
+    } catch (colErr) {
+      console.warn('Could not check for finder_name column:', colErr.message);
+    }
+
+    let result;
+    if (includeFinder) {
+      const insertValues = [userId, item_name, finder_name || tokenName || null, description, location, image_url, category || 'Others', validPostType, phone];
+      console.log('Full insert values (with finder_name):', insertValues);
+      [result] = await db.query(
+        `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        insertValues
+      );
+    } else {
+      const insertValues = [userId, item_name, description, location, image_url, category || 'Others', validPostType, phone];
+      console.log('Full insert values (without finder_name):', insertValues);
+      [result] = await db.query(
+        `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        insertValues
+      );
+    }
+
     console.log('Item inserted with ID:', result.insertId);
 
     // Verify insertion
@@ -91,6 +139,7 @@ exports.createMissingItem = async (req, res) => {
         id: result.insertId,
         user_id: userId,
         item_name,
+        finder_name: includeFinder ? (finder_name || tokenName || null) : undefined,
         description,
         location,
         image_url,
