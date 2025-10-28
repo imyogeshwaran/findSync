@@ -1,7 +1,11 @@
 // API URL Configuration
-// Use environment variable when available, otherwise default to the backend server used by project
-const BASE_HOST = (typeof process !== 'undefined' && process.env && process.env.VITE_API_HOST) ? process.env.VITE_API_HOST : 'http://127.0.0.1:5000';
+// In development, use relative paths to allow Vite's proxy to handle routing
+const isDev = import.meta.env.DEV;
+const BASE_HOST = isDev ? '' : (process.env.VITE_API_HOST || 'http://127.0.0.1:5000');
 const API_URL = `${BASE_HOST}/api`;
+
+// Debug logging for API configuration
+console.log('[API Config]', { isDev, BASE_HOST, API_URL });
 
 // Auth Token Management
 export const setAuthToken = (token) => {
@@ -12,19 +16,66 @@ export const setAuthToken = (token) => {
   }
 };
 
+// Firebase Auth to JWT
+export const loginWithFirebase = async (firebaseUser) => {
+  try {
+    const idToken = await firebaseUser.getIdToken();
+    const response = await fetch(`${API_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        firebase_uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        name: firebaseUser.displayName,
+        id_token: idToken
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get auth token from server');
+    }
+
+    const data = await response.json();
+    setAuthToken(data.token);
+    return data.token;
+  } catch (error) {
+    console.error('Error getting auth token:', error);
+    throw error;
+  }
+};
+
 export const getAuthToken = () => localStorage.getItem('authToken');
 
 // API Request Helper
-const apiRequest = async (url, options = {}) => {
+export const apiRequest = async (url, options = {}) => {
   const token = getAuthToken();
   const headers = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
     ...options.headers,
   };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+
+  const fullUrl = `${API_URL}${url}`;
+  console.log('[API Request]', { 
+    url: fullUrl,
+    method: options.method || 'GET',
+    hasToken: !!token,
+    tokenPreview: token ? `${token.slice(0, 20)}...` : null,
+    headers
+  });
+  console.log('[API Request]', { 
+    url: fullUrl,
+    method: options.method || 'GET',
+    hasToken: !!token,
+    tokenPreview: token ? `${token.slice(0, 20)}...` : null,
+    headers
+  });
 
   try {
     const response = await fetch(`${API_URL}${url}`, {
@@ -155,6 +206,18 @@ export const getAllMissingItems = async () => {
 
 export const getMissingItemById = async (id) => {
   return getItemById(id);
+};
+
+// Contacts / Notifications API
+export const createContact = async (payload) => {
+  return apiRequest('/contacts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
+export const getNotifications = async () => {
+  return apiRequest('/contacts');
 };
 
 export const getUserMissingItems = async () => {

@@ -175,3 +175,15 @@ export const deleteMissingItem = async (id) => {
     method: 'DELETE',
   });
 };
+
+// Contact / Notification APIs
+export const createContact = async (payload) => {
+  return apiRequest('/contacts', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
+export const getNotifications = async () => {
+  return apiRequest('/contacts');
+};

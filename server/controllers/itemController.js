@@ -246,7 +246,7 @@ exports.getMissingItemById = async (req, res) => {
     const { id } = req.params;
     
     const [items] = await db.query(
-      `SELECT i.*, u.name as owner_name, u.email as owner_email, u.firebase_uid 
+      `SELECT i.*, u.user_id as owner_id, u.name as owner_name, u.email as owner_email, u.firebase_uid 
        FROM Items i 
        JOIN Users u ON i.user_id = u.user_id 
        WHERE i.item_id = ? AND i.post_type = 'lost'`,

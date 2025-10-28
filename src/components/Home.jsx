@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken } from '../services/api.js';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
 
 // Success checkmark animation component
 const CheckmarkAnimation = () => (
@@ -732,6 +732,10 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); }}>Explore</a></li>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked'); onNavigate('find'); }}>Find</a></li>
           {user ? (
+            <>
+            <li>
+              <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); }} title="Notifications">🔔</a>
+            </li>
             <li style={{ position: 'relative' }}
                 onMouseEnter={() => setAccountOpen(true)}
                 onMouseLeave={() => setAccountOpen(false)}>
@@ -757,6 +761,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
                 </div>
               )}
             </li>
+            </>
           ) : (
             <li>
               <button onClick={onAuthClick} style={btnPrimary}>Sign In</button>
@@ -803,6 +808,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); setMobileOpen(false); }}>Home</a>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); setMobileOpen(false); }}>Explore</a>
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked (mobile)'); onNavigate('find'); setMobileOpen(false); }}>Find</a>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); setMobileOpen(false); }}>🔔 Notifications</a>
             {user ? (
               <details>
                 <summary style={{ cursor: 'pointer' }}>{user.displayName || 'Account'}</summary>
@@ -839,6 +845,9 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
 function ExploreSection({ userItems = [] }) {
   const [query, setQuery] = useState('');
   const [modalItem, setModalItem] = useState(null);
+  const [notifyOpenId, setNotifyOpenId] = useState(null);
+  const [notifyMessage, setNotifyMessage] = useState('');
+  const [sendingNotify, setSendingNotify] = useState(false);
 
   // Sample data with geo coords (approximate)
   const items = [
@@ -1012,19 +1021,56 @@ function ExploreSection({ userItems = [] }) {
                 >
                   View details
                 </button>
-                <button
-                  style={{
-                    flex: 1,
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.22)',
-                    background: 'rgba(0,0,0,0.35)',
-                    color: '#fff',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Save
-                </button>
+                <div style={{ flex: 1 }}>
+                  {notifyOpenId === it.id ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        value={notifyMessage}
+                        onChange={(e) => setNotifyMessage(e.target.value)}
+                        placeholder="Write a message to the owner..."
+                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.35)', color: '#fff' }}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!notifyMessage || notifyMessage.trim().length === 0) return alert('Please enter a message');
+                          try {
+                            setSendingNotify(true);
+                            // Server will resolve item owner from item_id; no need to fetch details here
+                            // If API helper not available, just call createContact with item id and message
+                            await createContact({ item_id: it.id, message: notifyMessage });
+                            alert('Notification sent to the item owner');
+                            setNotifyMessage('');
+                            setNotifyOpenId(null);
+                          } catch (err) {
+                            console.error('Failed to send notification:', err);
+                            alert('Failed to send notification: ' + (err.message || err));
+                          } finally {
+                            setSendingNotify(false);
+                          }
+                        }}
+                        style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4f46e5,#a855f7)', color: '#fff', cursor: 'pointer' }}
+                        disabled={sendingNotify}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setNotifyOpenId(it.id); setNotifyMessage(''); }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        background: 'rgba(0,0,0,0.35)',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Notify
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </article>
@@ -1178,6 +1224,50 @@ function ProfilePage({ user }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Notifications page component
+function NotificationsSection() {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const res = await getNotifications();
+        if (mounted && res && res.notifications) setNotifications(res.notifications);
+      } catch (err) {
+        console.error('Failed to load notifications:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  return (
+    <section style={{ padding: 20 }}>
+      <h2 style={{ marginTop: 0 }}>Notifications</h2>
+      {loading ? (
+        <div>Loading...</div>
+      ) : notifications.length === 0 ? (
+        <div style={{ opacity: 0.8 }}>No notifications yet.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {notifications.map(n => (
+            <div key={n.contact_id} style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontSize: 13, opacity: 0.9 }}><strong>{n.sender_name || n.sender_email || 'Someone'}</strong> • <span style={{ fontSize: 12, opacity: 0.7 }}>{new Date(n.contact_date).toLocaleString()}</span></div>
+              <div style={{ marginTop: 8 }}>{n.message}</div>
+              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>Regarding item id: <strong>{n.item_id}</strong></div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1520,6 +1610,8 @@ export default function Home() {
             </div>
           ) : view === 'explore' ? (
             <ExploreSection userItems={missingItems} />
+          ) : view === 'notifications' ? (
+            <NotificationsSection />
           ) : view === 'find' ? (
             <div style={{ padding: '20px 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>

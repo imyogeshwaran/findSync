@@ -13,12 +13,23 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Allow popups from auth providers to be closed by the opener in dev
+app.use((req, res, next) => {
+  // This relaxes COOP to allow popup windows to communicate their closed state back to the opener
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
+
 // Routes
 const userRoutes = require('./routes/userRoutes');
 const itemRoutes = require('./routes/itemRoutes');
+const contactRoutes = require('./routes/contactRoutes');
+const authRoutes = require('./routes/authRoutes');
 
 app.use('/api/users', userRoutes);
 app.use('/api/items', itemRoutes);
+app.use('/api/contacts', contactRoutes);
+app.use('/api/auth', authRoutes);
 
 // Health check route
 app.get('/health', (req, res) => {

@@ -3,6 +3,7 @@ import { doSignInWithEmailAndPassword, doSignInWithGoogle } from '../firebase/au
 import { auth } from '../firebase/firebase';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import {useAuth} from '../firebase/Acindex.jsx';
+import { loginWithFirebase } from '../services/api';
 
 const db = getFirestore();
 
@@ -30,6 +31,8 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
     try {
       const result = await doSignInWithEmailAndPassword(formData.email, formData.password);
       await logAuthEvent('login', result.user);
+      // Get JWT from our backend
+      await loginWithFirebase(result.user);
       setSuccessMsg('Login successful!');
       if (onAuthSuccess) onAuthSuccess(result.user);
       // Redirect or update UI as needed
@@ -45,6 +48,8 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
       const user = result?.user || result;
       if (user) {
         await logAuthEvent('login', user);
+        // Get JWT from our backend
+        await loginWithFirebase(user);
         setSuccessMsg('Google login successful!');
         if (onAuthSuccess) onAuthSuccess(user);
       }

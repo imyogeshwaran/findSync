@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes } from '../services/api.js';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
 import FindView from './Find.jsx';
+import { ChatDialog } from './ChatDialog';
 
 // Success checkmark animation component
 const CheckmarkAnimation = () => (
@@ -857,31 +858,36 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); }}>Explore</a></li>
           <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('find'); }}>Find</a></li>
           {user ? (
-            <li style={{ position: 'relative' }}
-                onMouseEnter={() => setAccountOpen(true)}
-                onMouseLeave={() => setAccountOpen(false)}>
-              <a href="#" style={linkStyle}>{user.displayName || 'Account'} ▾</a>
-              {accountOpen && (
-                <div style={{
-                  position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-                  minWidth: 180,
-                  background: 'rgba(0,0,0,0.6)',
-                  border: '1px solid rgba(255,255,255,0.12)',
-                  borderRadius: 10,
-                  padding: 8,
-                  backdropFilter: 'blur(4px)'
-                }}>
-                  <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
-                    <li>
-                      <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
-                    </li>
-                    <li>
-                      <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8, color: '#f87171' }}>Logout</a>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </li>
+            <>
+              <li>
+                <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); }} title="Notifications">🔔</a>
+              </li>
+              <li style={{ position: 'relative' }}
+                  onMouseEnter={() => setAccountOpen(true)}
+                  onMouseLeave={() => setAccountOpen(false)}>
+                <a href="#" style={linkStyle}>{user.displayName || 'Account'} ▾</a>
+                {accountOpen && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+                    minWidth: 180,
+                    background: 'rgba(0,0,0,0.6)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 10,
+                    padding: 8,
+                    backdropFilter: 'blur(4px)'
+                  }}>
+                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
+                      <li>
+                        <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
+                      </li>
+                      <li>
+                        <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8, color: '#f87171' }}>Logout</a>
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </li>
+            </>
           ) : (
             <li>
               <button onClick={onAuthClick} style={btnPrimary}>Sign In</button>
@@ -964,6 +970,10 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
 function ExploreSection({ userItems = [] }) {
   const [query, setQuery] = useState('');
   const [modalItem, setModalItem] = useState(null);
+  const [notifyOpenId, setNotifyOpenId] = useState(null);
+  const [notifyMessage, setNotifyMessage] = useState('');
+  const [sendingNotify, setSendingNotify] = useState(false);
+  const [activeChat, setActiveChat] = useState(null);
 
   // Sample data with geo coords (approximate)
   const items = [];
@@ -1157,19 +1167,58 @@ function ExploreSection({ userItems = [] }) {
                 >
                   View details
                 </button>
-                <button
-                  style={{
-                    flex: 1,
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1px solid rgba(255,255,255,0.22)',
-                    background: 'rgba(0,0,0,0.35)',
-                    color: '#fff',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Save
-                </button>
+                <div style={{ flex: 1 }}>
+                  {notifyOpenId === it.id ? (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        value={notifyMessage}
+                        onChange={(e) => setNotifyMessage(e.target.value)}
+                        placeholder="Write a message to the owner..."
+                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.35)', color: '#fff' }}
+                      />
+                      <button
+                        onClick={async () => {
+                          if (!notifyMessage || notifyMessage.trim().length === 0) return alert('Please enter a message');
+                          try {
+                            setSendingNotify(true);
+                            await createContact({ item_id: it.id, message: notifyMessage });
+                            setActiveChat({
+                              item_id: it.id,
+                              sender_id: user.id,
+                              receiver_id: it.owner_id
+                            });
+                            setNotifyMessage('');
+                            setNotifyOpenId(null);
+                          } catch (err) {
+                            console.error('Failed to send notification:', err);
+                            alert('Failed to send notification: ' + (err.message || err));
+                          } finally {
+                            setSendingNotify(false);
+                          }
+                        }}
+                        style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4f46e5,#a855f7)', color: '#fff', cursor: 'pointer' }}
+                        disabled={sendingNotify}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setNotifyOpenId(it.id); setNotifyMessage(''); }}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        background: 'rgba(0,0,0,0.35)',
+                        color: '#fff',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Notify
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
             </article>
@@ -1189,7 +1238,7 @@ function ExploreSection({ userItems = [] }) {
               <div style={{ padding: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
                   <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>{modalItem.title}</h3>
-                  <button onClick={() => setModalItem(null)} aria-label="Close"
+                  <button onClick={() => setModalItem(null)}
                     style={{ border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer' }}>✕</button>
                 </div>
                 <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>
@@ -1329,6 +1378,64 @@ function ProfilePage({ user }) {
   );
 }
 
+// Notifications list component
+function NotificationsSection() {
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState([]);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        setLoading(true);
+        const res = await getNotifications();
+        if (!mounted) return;
+        if (res && res.notifications) {
+          setNotifications(res.notifications);
+        } else if (res && res.success && Array.isArray(res.notifications)) {
+          setNotifications(res.notifications);
+        } else {
+          setError('Unexpected response from server');
+        }
+      } catch (err) {
+        console.error('Error loading notifications', err);
+        setError(err.message || String(err));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
+
+  return (
+    <section style={{ color: '#fff' }}>
+      <h2 style={{ marginTop: 0, fontSize: '1.25rem' }}>Notifications</h2>
+      {loading ? (
+        <div style={{ padding: 24 }}><LoadingSpinner /></div>
+      ) : error ? (
+        <div style={{ padding: 12, color: '#f87171' }}>Error loading notifications: {String(error)}</div>
+      ) : notifications.length === 0 ? (
+        <div style={{ padding: 20, background: 'rgba(255,255,255,0.03)', borderRadius: 10 }}>You have no notifications.</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          {notifications.map(n => (
+            <div key={n.contact_id} style={{ padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 700 }}>{n.sender_name || n.sender_email || 'Someone'}</div>
+                <div style={{ fontSize: 12, opacity: 0.8 }}>{n.contact_date ? new Date(n.contact_date).toLocaleString() : ''}</div>
+              </div>
+              <div style={{ marginTop: 8 }}>{n.message}</div>
+              {n.item_id && <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>About item ID: {n.item_id}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -1342,6 +1449,7 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
+  const [activeChat, setActiveChat] = useState(null);
 
   // Fetch missing items from backend
   const fetchMissingItems = async () => {
@@ -1551,9 +1659,11 @@ export default function Home() {
         <div style={{ maxWidth: 1024, margin: '0 auto', padding: '0 16px', width: '100%' }}>
           {view === 'explore' ? (
             <ExploreSection key={refreshKey} userItems={[...missingItems, ...userItems]} onViewItem={(it) => setModalItem(it)} />
-          ) : view === 'find' ? (
+            ) : view === 'find' ? (
             <FindView onPostClick={() => setShowAddModal(true)} onBrowseClick={() => setView('explore')} />
-          ) : view === 'profile' ? (
+            ) : view === 'notifications' ? (
+              <NotificationsSection />
+            ) : view === 'profile' ? (
             <ProfilePage user={user} />
           ) : (
             <div>
@@ -1853,6 +1963,13 @@ export default function Home() {
           </div>
         </>
       )}
+
+      {activeChat && (
+  <ChatDialog
+    contact={activeChat}
+    onClose={() => setActiveChat(null)}
+  />
+)}
     </div>
   );
 }
