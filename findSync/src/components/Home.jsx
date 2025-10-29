@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
+import { syncUserToBackend, createMissingItem, createItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
 import FindView from './Find.jsx';
 import { ChatDialog } from './ChatDialog';
 
@@ -116,7 +116,7 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
     description: '',
     location: '',
     mobile: '',
-    missingType: '',
+    post_type: '',
     category: '',
     image: null,
     preview: null
@@ -151,33 +151,25 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log('=== Modal handleSubmit - formData state ===', formData);
-    console.log('Modal formData.missingType:', formData.missingType);
+    console.log('Modal formData.post_type:', formData.post_type);
     console.log('Modal formData.category:', formData.category);
     
-    let payload;
-    if (formData.image) {
-      // If image is present, use FormData
-      payload = new FormData();
-      payload.append('name', formData.name);
-      payload.append('description', formData.description);
-      payload.append('location', formData.location);
-      payload.append('mobile', formData.mobile);
-      payload.append('image', formData.image);
-      payload.append('category', formData.category);
-      payload.append('missingType', formData.missingType);
-      console.log('=== Sending FormData payload ===');
-    } else {
-      // Otherwise, use JSON
-      payload = {
-        name: formData.name,
-        description: formData.description,
-        location: formData.location,
-        mobile: formData.mobile,
-        category: formData.category,
-        missingType: formData.missingType
-      };
-      console.log('=== Sending JSON payload ===', payload);
+    // Validation: Ensure required fields are provided
+    if (!formData.name || !formData.description || !formData.location || !formData.mobile || !formData.post_type || !formData.category || !formData.image) {
+      alert('Please fill in all required fields, including image.');
+      return;
     }
+  let payload = new FormData();
+  payload.append('name', formData.name);
+    payload.append('description', formData.description);
+    payload.append('location', formData.location);
+  payload.append('mobile', formData.mobile);
+    payload.append('image', formData.image);
+    payload.append('category', formData.category);
+    payload.append('post_type', formData.post_type);
+    console.log('formData.post_type:', payload.get('post_type'));
+    console.log('formData.category:', payload.get('category'));
+    console.log('=== Sending FormData payload ===', Array.from(payload.entries()));
     await onSubmit(payload);
     // Reset form
     setFormData({
@@ -185,7 +177,7 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       description: '',
       location: '',
       mobile: '',
-      missingType: '',
+      post_type: '',
       category: '',
       image: null,
       preview: null
@@ -402,8 +394,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               Post Type
             </label>
             <select
-              name="missingType"
-              value={formData.missingType}
+              name="post_type"
+              value={formData.post_type}
               onChange={handleChange}
               required
               disabled={isSubmitting}
@@ -413,7 +405,7 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
                 borderRadius: '10px',
                 border: '1px solid rgba(255,255,255,0.18)',
                 background: isSubmitting ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.35)',
-                color: isSubmitting ? '#6b7280' : (formData.missingType ? '#fff' : 'rgba(255,255,255,0.5)'),
+                color: isSubmitting ? '#6b7280' : (formData.post_type ? '#fff' : 'rgba(255,255,255,0.5)'),
                 fontSize: '1rem',
                 outline: 'none',
                 cursor: isSubmitting ? 'not-allowed' : 'pointer'
@@ -1565,48 +1557,84 @@ export default function Home() {
   });
 
   // Handle submission of new missing item
-  const handleAddItem = async (formData) => {
+  const handleAddItem = async (input) => {
     setIsSubmitting(true);
 
-    console.log('=== handleAddItem received formData ===', formData);
-    console.log('formData.missingType:', formData.missingType);
-    console.log('formData.category:', formData.category);
-    
-    // Store the submission type in localStorage to help identify recent submissions
-    localStorage.setItem('lastSubmittedType', formData.missingType || 'lost');
+    console.log('=== handleAddItem received ===', input);
 
-    // Validation: Ensure required fields are provided
-    if (!formData.name || !formData.location || !formData.missingType || !formData.category) {
+    const isFormData = (typeof FormData !== 'undefined') && (input instanceof FormData);
+    if (isFormData) {
+      console.log('FormData entries:', Array.from(input.entries()));
+    }
+
+    // Normalize into a plain `data` object for validation and local fallback
+    const data = {
+      name: '',
+      description: '',
+      location: '',
+      mobile: '',
+      preview: null,
+      category: '',
+      missingType: ''
+    };
+
+    if (isFormData) {
+      data.name = input.get('item_name') || input.get('name') || '';
+      data.description = input.get('description') || '';
+      data.location = input.get('location') || '';
+      data.mobile = input.get('phone') || input.get('mobile') || '';
+      // FormData won't have preview; leave as null
+      data.category = input.get('category') || '';
+      data.missingType = input.get('post_type') || '';
+    } else if (input && typeof input === 'object') {
+      data.name = input.name || input.item_name || '';
+      data.description = input.description || '';
+      data.location = input.location || '';
+      data.mobile = input.mobile || input.phone || '';
+      data.preview = input.preview || input.image_url || null;
+      data.category = input.category || '';
+      data.missingType = input.missingType || input.post_type || input.postType || '';
+    }
+
+    // Store the submission type in localStorage
+    localStorage.setItem('lastSubmittedType', data.missingType || 'lost');
+
+    // Validation
+    if (!data.name || !data.location || !data.missingType || !data.category) {
       alert('Please fill in all required fields.');
       setIsSubmitting(false);
       return;
     }
 
-    console.log('Submitting item:', formData);
-
     try {
-      const payload = {
-        item_name: formData.name,
-        description: formData.description,
-        location: formData.location,
-        phone: formData.mobile,
-        image_url: formData.preview,
-        category: formData.category || 'Others',
-        post_type: formData.missingType || 'lost'
-      };
-      console.log('Submitting payload to backend:', payload);
-      const response = await createMissingItem(payload);
-      console.log('Item created response:', response);
-      // Show success animation
+      if (isFormData) {
+        // Backend supports multipart via createItem (sends FormData directly)
+        console.log('Submitting multipart FormData to backend...');
+        const response = await createItem(input);
+        console.log('createItem response:', response);
+      } else {
+        const payload = {
+          item_name: data.name,
+          description: data.description,
+          location: data.location,
+          phone: data.mobile,
+          image_url: data.preview,
+          category: data.category || 'Others',
+          post_type: data.missingType || 'lost'
+        };
+        console.log('Submitting payload to backend:', payload);
+        const response = await createMissingItem(payload);
+        console.log('Item created response:', response);
+      }
+
+      // Show success animation and refresh list
       setShowSuccess(true);
-      // Small delay to ensure backend has processed the item
       setTimeout(async () => {
-        // Refresh list from backend
         console.log('Refreshing missing items after successful post...');
         await fetchMissingItems();
         console.log('Missing items refreshed successfully');
       }, 500);
-      // Hide success after 2 seconds and close modal
+
       setTimeout(() => {
         setShowSuccess(false);
         setShowAddModal(false);
@@ -1616,17 +1644,17 @@ export default function Home() {
       // Fallback to local state so user still sees it
       const newItem = {
         id: `temp-${Date.now()}`,
-        title: formData.name,
-        description: formData.description,
-        location: formData.location,
-        image: formData.preview || 'https://share.google/images/5RQfBinTTl7vaFJK3',
+        title: data.name,
+        description: data.description,
+        location: data.location,
+        image: data.preview || 'https://share.google/images/5RQfBinTTl7vaFJK3',
         date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
         ownerName: 'You',
-        ownerLocation: formData.location,
-        ownerPhone: formData.mobile,
+        ownerLocation: data.location,
+        ownerPhone: data.mobile,
         finder: 'Missing Item',
-        category: formData.category || 'Others',
-        postType: formData.missingType || 'lost'
+        category: data.category || 'Others',
+        postType: data.missingType || 'lost'
       };
       console.log('Adding item to local state:', newItem);
       setUserItems(prev => [newItem, ...prev]);

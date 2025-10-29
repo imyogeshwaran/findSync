@@ -90,7 +90,19 @@ app.post('/api/items/missing', authenticateToken, upload.single('image'), async 
   try {
     // If sent as FormData, fields are in req.body, file in req.file
     const { name, description, location, mobile, category } = req.body;
-    const image_url = req.file ? req.file.originalname : req.body.image_url;
+    // If an image file was uploaded, convert it to a data URL so the frontend can display it immediately.
+    let image_url = null;
+    if (req.file) {
+      try {
+        const base64 = req.file.buffer.toString('base64');
+        image_url = `data:${req.file.mimetype};base64,${base64}`;
+      } catch (err) {
+        console.error('Failed to convert uploaded image to base64:', err);
+        image_url = req.file.originalname;
+      }
+    } else {
+      image_url = req.body.image_url || req.body.image || null;
+    }
     const userId = req.user.user_id;
 
     if (!name || !location) {
@@ -103,11 +115,11 @@ app.post('/api/items/missing', authenticateToken, upload.single('image'), async 
       [userId, name, description, location, image_url, category || 'Others']
     );
 
-    // Optionally store image binary in ItemImages table
+    // Optionally store a reference to the image in ItemImages table
     if (req.file) {
       await promisePool.query(
-        `INSERT INTO ItemImages (item_id, image_url, image_data) VALUES (?, ?, ?)`,
-        [result.insertId, req.file.originalname, req.file.buffer]
+        `INSERT INTO ItemImages (item_id, image_url) VALUES (?, ?)`,
+        [result.insertId, image_url]
       );
     }
 
