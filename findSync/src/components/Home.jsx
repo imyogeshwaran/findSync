@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
+import { getImageUrl } from '../utils/imageHelpers.js';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncUserToBackend, createMissingItem, createItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
@@ -112,10 +113,10 @@ document.head.appendChild(styles);
 // Modal component for adding a missing item
 function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) {
   const [formData, setFormData] = useState({
-    name: '',
+    item_name: '',
     description: '',
     location: '',
-    mobile: '',
+    phone: '',
     post_type: '',
     category: '',
     image: null,
@@ -125,12 +126,19 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    console.log(`=== Form field changed: ${name} = ${value} ===`);
+    // Map common input name aliases to our internal formData keys
+    let key = name;
+    if (name === 'name') key = 'item_name';
+    if (name === 'mobile') key = 'phone';
+    if (name === 'postType') key = 'post_type';
+    if (name === 'post_type') key = 'post_type';
+
+    console.log(`=== Form field changed: ${name} -> ${key} = ${value} ===`);
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [key]: value
     }));
-    console.log('Updated formData will be:', { ...formData, [name]: value });
+    console.log('Updated formData will be:', { ...formData, [key]: value });
   };
 
   const handleImageChange = (e) => {
@@ -151,32 +159,34 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     console.log('=== Modal handleSubmit - formData state ===', formData);
-    console.log('Modal formData.post_type:', formData.post_type);
-    console.log('Modal formData.category:', formData.category);
     
     // Validation: Ensure required fields are provided
-    if (!formData.name || !formData.description || !formData.location || !formData.mobile || !formData.post_type || !formData.category || !formData.image) {
+    if (!formData.item_name || !formData.description || !formData.location || !formData.phone || !formData.image) {
       alert('Please fill in all required fields, including image.');
       return;
     }
+
   let payload = new FormData();
-  payload.append('name', formData.name);
-    payload.append('description', formData.description);
-    payload.append('location', formData.location);
-  payload.append('mobile', formData.mobile);
-    payload.append('image', formData.image);
-    payload.append('category', formData.category);
-    payload.append('post_type', formData.post_type);
+  // Append both alias keys to be compatible with either server implementation
+  payload.append('item_name', formData.item_name);
+  payload.append('name', formData.item_name);
+  payload.append('description', formData.description);
+  payload.append('location', formData.location);
+  payload.append('phone', formData.phone);
+  payload.append('mobile', formData.phone);
+  payload.append('image', formData.image);
+  payload.append('category', formData.category || 'Others');
+  payload.append('post_type', formData.post_type || 'lost');
     console.log('formData.post_type:', payload.get('post_type'));
     console.log('formData.category:', payload.get('category'));
     console.log('=== Sending FormData payload ===', Array.from(payload.entries()));
     await onSubmit(payload);
     // Reset form
     setFormData({
-      name: '',
+      item_name: '',
       description: '',
       location: '',
-      mobile: '',
+      phone: '',
       post_type: '',
       category: '',
       image: null,
@@ -272,7 +282,7 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
             <input
               type="text"
               name="name"
-              value={formData.name}
+              value={formData.item_name}
               onChange={handleChange}
               required
               disabled={isSubmitting}
@@ -366,7 +376,7 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
             <input
               type="tel"
               name="mobile"
-              value={formData.mobile}
+              value={formData.phone}
               onChange={handleChange}
               required
               style={{
@@ -1460,7 +1470,8 @@ export default function Home() {
             description: it.description,
             location: it.location,
             date: it.date || (it.posted_at ? new Date(it.posted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }) : 'N/A'),
-            image: it.image || it.image_url || 'https://share.google/images/5RQfBinTTl7vaFJK3',
+            // Backend returns the image URL as `image` (transformed) or `image_url` (raw), support both
+            image: getImageUrl(it.image || it.image_url) || 'https://share.google/images/5RQfBinTTl7vaFJK3',
             ownerName: it.ownerName || it.owner_name || 'Unknown',
             ownerPhone: it.ownerPhone || it.owner_phone || it.phone || it.mobile,
             ownerLocation: it.ownerLocation || it.location,
@@ -1469,6 +1480,13 @@ export default function Home() {
             postType: it.post_type // Use the exact value from backend, no fallback
           };
           console.log('Mapped item - Final postType:', mapped.postType, '| Title:', mapped.title);
+          // Log image URL info for debugging image loading issues
+          try {
+            console.log('Mapped item image_url (raw):', it.image_url);
+            console.log('Mapped item image (after getImageUrl):', mapped.image);
+          } catch (e) {
+            console.warn('Failed to log image info', e);
+          }
           return mapped;
         });
         console.log('Setting missing items state with', mappedItems.length, 'items');

@@ -1,4 +1,6 @@
 const db = require('../config/database');
+const fs = require('fs');
+const path = require('path');
 
 // Create a new missing item with proper post_type handling
 exports.createMissingItem = async (req, res) => {
@@ -18,7 +20,48 @@ exports.createMissingItem = async (req, res) => {
     console.log('==========================================');
     
     // Extract incoming fields
-    let { item_name, description, location, image_url, category, phone, post_type, finder_name } = req.body;
+    let { item_name, description, location, category, phone, post_type, finder_name } = req.body;
+    
+    // Handle uploaded image file
+    // Instead of storing large base64 data in the DB (which can overflow column limits),
+    // save the file to disk under server/public/uploads and store a small URL path in DB.
+    let image_url = null;
+    if (req.file) {
+      try {
+        // Ensure uploads directory exists
+        const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
+        fs.mkdirSync(uploadsDir, { recursive: true });
+
+        // Determine extension from original name or fallback to jpg
+        const origName = req.file.originalname || '';
+        let ext = path.extname(origName).toLowerCase();
+        if (!ext) {
+          // Fallback by mimetype
+          if (req.file.mimetype === 'image/png') ext = '.png';
+          else if (req.file.mimetype === 'image/webp') ext = '.webp';
+          else if (req.file.mimetype === 'image/gif') ext = '.gif';
+          else ext = '.jpg';
+        }
+
+        const filename = `${Date.now()}-${Math.random().toString(36).slice(2,10)}${ext}`;
+        const filePath = path.join(uploadsDir, filename);
+
+        // Write buffer to disk
+        fs.writeFileSync(filePath, req.file.buffer);
+
+        // Store the accessible uploads path (served by server as /uploads/...)
+        // Use absolute URL so the browser loads image from backend (not from Vite dev server)
+        const relativePath = `/uploads/${filename}`;
+        const host = req.get && req.get('host') ? req.get('host') : (process.env.BACKEND_HOST || 'localhost:5000');
+        // Store just the relative path - the frontend will construct the full URL
+        image_url = relativePath;
+        console.log('Saved uploaded image to', filePath, 'and stored image_url as', image_url);
+      } catch (fsErr) {
+        console.error('Failed to save uploaded file to disk:', fsErr.message);
+        // Keep image_url null so DB insert won't store an oversized value
+        image_url = null;
+      }
+    }
 
     // Resolve user id: prefer req.user.id (if token contains internal id),
     // otherwise lookup or create a Users row using firebase_uid from token.
@@ -103,7 +146,11 @@ exports.createMissingItem = async (req, res) => {
 
     let result;
     if (includeFinder) {
-      const insertValues = [userId, item_name, finder_name || tokenName || null, description, location, image_url, category || 'Others', validPostType, phone];
+      // Ensure finder_name is never null if the column is NOT NULL in the schema.
+      // Prefer explicit finder_name from the request, otherwise use tokenName (from auth token),
+      // fall back to the user's name from DB (already resolved above) or a safe default.
+      const resolvedFinderName = finder_name || tokenName || 'Unknown';
+      const insertValues = [userId, item_name, resolvedFinderName, description, location, image_url, category || 'Others', validPostType, phone];
       console.log('Full insert values (with finder_name):', insertValues);
       [result] = await db.query(
         `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 

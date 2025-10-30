@@ -1,8 +1,19 @@
 // API URL Configuration
 // In development, use relative paths to allow Vite's proxy to handle routing
 const isDev = import.meta.env.DEV;
-const BASE_HOST = isDev ? '' : (process.env.VITE_API_HOST || 'http://127.0.0.1:5000');
+// In development, we use relative URLs to work with Vite's proxy
+// In production, we use the configured API host or fall back to localhost:3000
+const BASE_HOST = isDev ? '' : (process.env.VITE_API_HOST || 'http://localhost:3000');
 const API_URL = `${BASE_HOST}/api`;
+
+// Log API configuration for debugging
+console.log('[API Config]', {
+    isDev,
+    BASE_HOST,
+    API_URL,
+    'import.meta.env.DEV': import.meta.env.DEV,
+    'process.env.NODE_ENV': process.env.NODE_ENV
+});
 
 // Debug logging for API configuration
 console.log('[API Config]', { isDev, BASE_HOST, API_URL });
