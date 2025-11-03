@@ -3,6 +3,7 @@ import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
+import { io } from 'socket.io-client';
 
 // Success checkmark animation component
 const CheckmarkAnimation = () => (
@@ -1271,6 +1272,8 @@ function NotificationsSection() {
   );
 }
 
+const SOCKET_URL = 'http://localhost:3000'; // Change if your backend runs elsewhere
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
@@ -1288,6 +1291,7 @@ export default function Home() {
   const [user, setUser] = useState(null); // Current authenticated user
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [items, setItems] = useState([]); // or whatever your main item state is
 
   // Fetch missing items from backend
   const fetchMissingItems = async () => {
@@ -1423,6 +1427,26 @@ export default function Home() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    // Fetch initial items as usual
+    getAllMissingItems().then(data => {
+      if (data && data.items) setItems(data.items);
+    });
+
+    // Set up Socket.IO connection
+    const socket = io(SOCKET_URL, { transports: ['websocket'] });
+    socket.on('connect', () => {
+      console.log('Connected to Socket.IO server');
+    });
+    socket.on('new_item', (item) => {
+      console.log('Received new item via socket:', item);
+      setItems(prev => [item, ...prev]); // Prepend new item
+    });
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   return (
     <div style={{ background: '#0b0b0b', minHeight: '100vh', color: '#ffffff', position: 'relative', overflowX: 'hidden', overflowY: 'auto' }}>
@@ -1621,7 +1645,7 @@ export default function Home() {
                   style={{
                     padding: '12px 24px',
                     borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #4f46e5 0%, #a855f7 100%)',
+                    background: 'linear-gradient(135deg, #4f46e5  0%, #a855f7 100%)',
                     border: 'none',
                     color: 'white',
                     fontSize: '1rem',

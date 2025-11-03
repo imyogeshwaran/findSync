@@ -14,11 +14,12 @@ async function logAuthEvent(type, user) {
 }
 
 function SignupForm({ onShowLogin, onAuthSuccess }) {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', mobile: '' });
   const [showPasswordSetup, setShowPasswordSetup] = useState(false);
-  const [pwForm, setPwForm] = useState({ password: '', confirm: '' });
+  const [pwForm, setPwForm] = useState({ password: '', confirm: '', phone: '', mobile: '' });
   const [googleUser, setGoogleUser] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (!statusMsg) return;
@@ -33,14 +34,68 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Validate required fields
+      const newErrors = {};
+      if (!formData.phone) {
+        newErrors.phone = 'Please enter a phone number';
+      }
+      if (!formData.mobile) {
+        newErrors.mobile = 'Please enter a mobile number';
+      }
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        return;
+      }
+
+      // Create user in Firebase
       const cred = await doCreateUserWithEmailAndPassword(formData.email, formData.password);
-      await logAuthEvent('signup', cred.user);
+      console.log('Firebase user created:', cred.user.uid);
+      
+      try {
+        await logAuthEvent('signup', cred.user);
+        
+        // Sync user data to SQL database
+        const response = await fetch('/api/auth/sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            firebase_uid: cred.user.uid,
+            name: formData.name,
+            email: formData.email,
+            password: formData.password, // Note: This is only for SQL auth
+            phone: formData.phone,
+            mobile: formData.mobile,
+            isGoogleAuth: false
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to sync user data with database');
+        }
+
+        const data = await response.json();
+        console.log('User synced successfully:', data);
+        
+        if (!data.token) {
+          throw new Error('No token received from server');
+        }
+        
+        // Store the token from backend
+        localStorage.setItem('token', data.token);
+      } catch (error) {
+        console.error('Error during user sync:', error);
+        throw new Error('Failed to complete signup: ' + error.message);
+      }
+
       setStatusMsg('Account created successfully!');
       if (onAuthSuccess) onAuthSuccess(cred.user);
       if (onShowLogin) onShowLogin();
     } catch (error) {
       alert(error.message);
-      console.error(error);
+      console.error('Signup error:', error);
     }
   };
 
@@ -53,12 +108,37 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
       if (user) {
         await logAuthEvent('signup', user);
         if (isNewUser) {
-          // Prompt to set a password for email/password login as well
+          // Store Google user info and show password/phone setup
           setGoogleUser(user);
           setShowPasswordSetup(true);
-          setStatusMsg('Google sign up successful! You can also set a password to login with email + password.');
-          if (onAuthSuccess) onAuthSuccess(user);
+          setStatusMsg('Almost done! Please set up your password and phone number.');
         } else {
+          // Check if user exists in SQL database
+          try {
+            const response = await fetch('/api/auth/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                firebase_uid: user.uid,
+                name: user.displayName,
+                email: user.email,
+                isGoogleAuth: true
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to sync user data');
+            }
+
+            const data = await response.json();
+            localStorage.setItem('token', data.token);
+          } catch (syncError) {
+            console.error('Error syncing user:', syncError);
+            // Continue with Firebase auth even if sync fails
+          }
+
           setStatusMsg('Logged in with Google.');
           if (onAuthSuccess) onAuthSuccess(user);
           if (onShowLogin) onShowLogin();
@@ -73,6 +153,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   const handleLinkPassword = async (e) => {
     e.preventDefault();
     if (!googleUser) return;
+    
     if (!pwForm.password || pwForm.password.length < 6) {
       alert('Password must be at least 6 characters.');
       return;
@@ -81,9 +162,39 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
       alert('Passwords do not match.');
       return;
     }
+    if (!pwForm.phone) {
+      alert('Please enter your phone number.');
+      return;
+    }
+
     try {
+      // Link password to Google account
       await doLinkPasswordToGoogleAccount(googleUser, pwForm.password);
-      setStatusMsg('Password linked successfully! You can now login using your email and password.');
+
+      // Sync user data with SQL database
+      const response = await fetch('/api/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firebase_uid: googleUser.uid,
+          name: googleUser.displayName,
+          email: googleUser.email,
+          password: pwForm.password,
+          phone: pwForm.phone,
+          isGoogleAuth: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sync user data with database');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+
+      setStatusMsg('Account setup completed successfully!');
       setShowPasswordSetup(false);
       if (onAuthSuccess) onAuthSuccess(googleUser);
       if (onShowLogin) onShowLogin();
@@ -164,6 +275,42 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
               <label htmlFor="password">Password</label>
               <input id="password" name="password" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc' }} value={formData.password} onChange={handleChange} />
             </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label htmlFor="phone">Phone Number</label>
+              <input 
+                id="phone" 
+                name="phone" 
+                type="tel" 
+                placeholder="Enter your phone number" 
+                required 
+                style={{ 
+                  padding: '0.75rem', 
+                  borderRadius: '6px', 
+                  border: errors.phone ? '1px solid #ef4444' : '1px solid #ccc' 
+                }} 
+                value={formData.phone} 
+                onChange={handleChange} 
+              />
+              {errors.phone && <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{errors.phone}</span>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label htmlFor="mobile">Mobile Number</label>
+              <input 
+                id="mobile" 
+                name="mobile" 
+                type="tel" 
+                placeholder="Enter your mobile number" 
+                required 
+                style={{ 
+                  padding: '0.75rem', 
+                  borderRadius: '6px', 
+                  border: errors.mobile ? '1px solid #ef4444' : '1px solid #ccc' 
+                }} 
+                value={formData.mobile} 
+                onChange={handleChange} 
+              />
+              {errors.mobile && <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{errors.mobile}</span>}
+            </div>
             <button type="submit" style={{ padding: '0.75rem', borderRadius: '6px', background: '#222', color: 'white', fontWeight: 'bold', border: 'none', marginTop: '0.5rem' }}>Sign up</button>
           </div>
         </form>
@@ -196,6 +343,10 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label htmlFor="confirmPassword">Confirm Password</label>
                 <input id="confirmPassword" name="confirmPassword" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010' }} value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label htmlFor="phone">Phone Number</label>
+                <input id="phone" name="phone" type="tel" placeholder="Enter your phone number" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010' }} value={pwForm.phone} onChange={(e) => setPwForm({ ...pwForm, phone: e.target.value })} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button type="submit" style={{ padding: '0.75rem', backgroundColor: '#111827', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500', flex: 1 }}>Save password</button>

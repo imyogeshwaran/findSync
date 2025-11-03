@@ -6,12 +6,12 @@ async function initializeDatabase() {
   try {
     console.log('🔄 Checking database for existing schema...');
 
-    // If environment explicitly forces initialization, run schema regardless
-    const forceInit = process.env.FORCE_DB_INIT === 'true' || process.env.INIT_DB === 'true';
+    // Never force init if tables exist
+    const forceInit = false;
 
-    // Check if the Items table already exists in the current database
+    // Check if the Users table exists in the current database
     const [rows] = await db.query(
-      `SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'Items'`,
+      `SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'Users'`,
       [process.env.DB_NAME]
     );
 
@@ -30,21 +30,44 @@ async function initializeDatabase() {
 
     const exists = rows && rows[0] && rows[0].cnt > 0;
 
-    if (exists && !forceInit) {
-      console.log('ℹ️ Database tables already exist. Skipping schema initialization.');
-      return;
+    if (exists) {
+      console.log('ℹ️ Database tables already exist. Applying only schema updates if needed...');
+    } else {
+      console.log('✅ Running initial schema creation...');
+      const schemaPath = path.join(__dirname, 'schema.sql');
+      const schema = fs.readFileSync(schemaPath, 'utf8');
+
+      // Split by semicolon and execute each statement
+      const statements = schema.split(';').filter(stmt => stmt.trim());
+
+      for (const statement of statements) {
+        if (statement.trim()) {
+          try {
+            await db.query(statement);
+          } catch (err) {
+            // Log error but continue if it's just a "table exists" error
+            if (!err.message.includes('already exists')) {
+              throw err;
+            }
+          }
+        }
+      }
     }
 
-    console.log('✅ Running schema initialization (new DB or forced)');
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-
-    // Split by semicolon and execute each statement
-    const statements = schema.split(';').filter(stmt => stmt.trim());
-
-    for (const statement of statements) {
+    // Apply schema fixes
+    console.log('✅ Applying schema fixes...');
+    const schemaFixPath = path.join(__dirname, 'ensure_schema.sql');
+    const schemaFix = fs.readFileSync(schemaFixPath, 'utf8');
+    
+    const fixStatements = schemaFix.split(';').filter(stmt => stmt.trim());
+    
+    for (const statement of fixStatements) {
       if (statement.trim()) {
-        await db.query(statement);
+        try {
+          await db.query(statement);
+        } catch (err) {
+          console.warn('Warning: Schema fix error (can be ignored if column exists):', err.message);
+        }
       }
     }
 

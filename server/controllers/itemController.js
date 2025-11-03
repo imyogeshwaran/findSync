@@ -56,6 +56,10 @@ exports.createMissingItem = async (req, res) => {
         // Store just the relative path - the frontend will construct the full URL
         image_url = relativePath;
         console.log('Saved uploaded image to', filePath, 'and stored image_url as', image_url);
+
+        // Create absolute URL for immediate Socket.IO broadcast
+        const baseUrl = `http://${host}`;
+        const absoluteImageUrl = `${baseUrl}${relativePath}`;
       } catch (fsErr) {
         console.error('Failed to save uploaded file to disk:', fsErr.message);
         // Keep image_url null so DB insert won't store an oversized value
@@ -63,25 +67,47 @@ exports.createMissingItem = async (req, res) => {
       }
     }
 
-    // Resolve user id: prefer req.user.id (if token contains internal id),
-    // otherwise lookup or create a Users row using firebase_uid from token.
+    // Resolve user id and name from the token and database
     let userId = req.user && req.user.id;
     const firebaseUid = req.user && req.user.firebase_uid;
     const tokenName = req.user && (req.user.name || req.user.displayName || null);
+    
+    console.log('Auth debug - Token data:', {
+      userId,
+      firebaseUid,
+      tokenName,
+      fullUser: req.user
+    });
 
+    // If we don't have a userId but have firebaseUid, look up or create the user
     if ((!userId || userId === null) && firebaseUid) {
       try {
         const [users] = await db.query('SELECT user_id, name FROM Users WHERE firebase_uid = ?', [firebaseUid]);
         if (users && users.length > 0) {
           userId = users[0].user_id;
-          if (!finder_name) finder_name = users[0].name || finder_name;
+          finder_name = users[0].name || tokenName || finder_name;
+          console.log('Found existing user:', { userId, name: users[0].name });
         } else {
-          const [r] = await db.query('INSERT INTO Users (firebase_uid, email, name) VALUES (?, ?, ?)', [firebaseUid, req.user.email || null, tokenName || null]);
+          // Create new user with name from token
+          const [r] = await db.query('INSERT INTO Users (firebase_uid, email, name) VALUES (?, ?, ?)', 
+            [firebaseUid, req.user.email || null, tokenName || null]);
           userId = r.insertId;
-          if (!finder_name) finder_name = tokenName || finder_name;
+          finder_name = tokenName || finder_name;
+          console.log('Created new user:', { userId, name: tokenName });
         }
       } catch (err) {
         console.error('Error resolving user from firebase_uid:', err.message);
+      }
+    } else if (userId) {
+      // If we have userId, make sure to get the name
+      try {
+        const [users] = await db.query('SELECT name FROM Users WHERE user_id = ?', [userId]);
+        if (users && users.length > 0 && users[0].name) {
+          finder_name = users[0].name;
+          console.log('Retrieved name for existing userId:', { userId, name: users[0].name });
+        }
+      } catch (err) {
+        console.error('Error getting user name:', err.message);
       }
     }
 
@@ -135,8 +161,10 @@ exports.createMissingItem = async (req, res) => {
     console.log('=== INSERTING INTO DATABASE ===');
     console.log('post_type value being inserted:', validPostType);
 
-    // Detect whether the Items table has a finder_name column
-    let includeFinder = false;
+  // Detect whether the Items table has a finder_name column
+  let includeFinder = false;
+  // Will hold the final name used for finder_name column
+  let resolvedFinderName = null;
     try {
       const [foundCols] = await db.query("SHOW COLUMNS FROM Items LIKE 'finder_name'");
       includeFinder = foundCols && foundCols.length > 0;
@@ -145,12 +173,60 @@ exports.createMissingItem = async (req, res) => {
     }
 
     let result;
+    let userName = 'Unknown';
     if (includeFinder) {
-      // Ensure finder_name is never null if the column is NOT NULL in the schema.
-      // Prefer explicit finder_name from the request, otherwise use tokenName (from auth token),
-      // fall back to the user's name from DB (already resolved above) or a safe default.
-      const resolvedFinderName = finder_name || tokenName || 'Unknown';
-      const insertValues = [userId, item_name, resolvedFinderName, description, location, image_url, category || 'Others', validPostType, phone];
+      // Get the user's name from the database
+      try {
+        console.log('Looking up user name for userId:', userId);
+        const [userResult] = await db.query('SELECT name FROM Users WHERE user_id = ?', [userId]);
+        if (userResult && userResult.length > 0 && userResult[0].name) {
+          userName = userResult[0].name;
+        }
+      } catch (err) {
+        console.error('Error getting user name:', err);
+      }
+      try {
+        console.log('Looking up user name for userId:', userId);
+        const [userResult] = await db.query('SELECT name FROM Users WHERE user_id = ?', [userId]);
+        console.log('Database query result for user:', userResult);
+        
+        if (userResult && userResult.length > 0) {
+          console.log('Found user in database:', userResult[0]);
+          if (userResult[0].name) {
+            userName = userResult[0].name;
+            console.log('Using name from database:', userName);
+          } else {
+            console.log('User found but name is null in database');
+          }
+        } else {
+          console.log('No user found in database for userId:', userId);
+        }
+      } catch (err) {
+        console.error('Error getting user name:', err.message);
+      }
+      
+      console.log('Name resolution debug:', {
+        userNameFromDB: userName,
+        tokenName: tokenName,
+        finder_name: finder_name
+      });
+
+      // If DB has no name but token provides one, update the Users table so future lookups succeed
+      if ((userName === 'Unknown' || !userName) && tokenName) {
+        try {
+          console.log('Updating Users table with tokenName for user_id', userId, '->', tokenName);
+          await db.query('UPDATE Users SET name = ? WHERE user_id = ?', [tokenName, userId]);
+          userName = tokenName;
+        } catch (updateErr) {
+          console.error('Failed to update Users.name from tokenName:', updateErr.message);
+        }
+      }
+
+  // Use database name as priority, then fallback to token name or finder_name
+  resolvedFinderName = userName !== 'Unknown' ? userName : (tokenName || finder_name || 'Unknown');
+      console.log('Final resolved finder name:', resolvedFinderName);
+
+  const insertValues = [userId, item_name, resolvedFinderName, description, location, image_url, category || 'Others', validPostType, phone];
       console.log('Full insert values (with finder_name):', insertValues);
       [result] = await db.query(
         `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 
@@ -169,6 +245,34 @@ exports.createMissingItem = async (req, res) => {
 
     console.log('Item inserted with ID:', result.insertId);
 
+    // Prepare the new item data for Socket.IO emission
+    const newItemData = {
+      id: result.insertId,
+      item_name,
+      description,
+      location,
+      image_url,
+      category: category || 'Others',
+      post_type: validPostType,
+      finder_name: resolvedFinderName || userName,
+      phone,
+      posted_at: new Date().toISOString()
+    };
+
+    // Emit the new item through Socket.IO
+    try {
+      console.log('Emitting new item through Socket.IO:', newItemData);
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new_item', newItemData);
+      } else {
+        console.error('Socket.IO instance not found');
+      }
+    } catch (socketError) {
+      console.error('Error emitting Socket.IO event:', socketError);
+      // Continue with response even if socket emission fails
+    }
+
     // Verify insertion
     const [checkResult] = await db.query(
       `SELECT post_type FROM Items WHERE item_id = ?`,
@@ -179,6 +283,29 @@ exports.createMissingItem = async (req, res) => {
       console.log('VERIFICATION: post_type is now:', checkResult[0].post_type);
     }
 
+    // Emit real-time event to all connected clients
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('new_item', {
+          id: result.insertId,
+          user_id: userId,
+          item_name,
+          finder_name: includeFinder ? (resolvedFinderName || tokenName || null) : undefined,
+          description,
+          location,
+          image_url,
+          category: category || 'Others',
+          post_type: validPostType,
+          phone
+        });
+        console.log('Emitted new_item event via Socket.IO');
+      } else {
+        console.warn('Socket.IO instance not found on app');
+      }
+    } catch (emitErr) {
+      console.error('Error emitting new_item event:', emitErr);
+    }
     res.status(201).json({
       success: true,
       message: 'Missing item created successfully',
@@ -186,7 +313,7 @@ exports.createMissingItem = async (req, res) => {
         id: result.insertId,
         user_id: userId,
         item_name,
-        finder_name: includeFinder ? (finder_name || tokenName || null) : undefined,
+        finder_name: includeFinder ? (resolvedFinderName || tokenName || null) : undefined,
         description,
         location,
         image_url,

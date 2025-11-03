@@ -53,25 +53,10 @@ googleProvider.setCustomParameters({
 
 export const doCreateUserWithEmailAndPassword = async(email, password, name) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    // Call the backend API to sync user data
-    try {
-        const response = await fetch('/api/users/sync', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                firebase_uid: userCredential.user.uid,
-                email: email,
-                name: name
-            }),
-        });
-        if (!response.ok) {
-            throw new Error('Failed to sync user data');
-        }
-    } catch (error) {
-        console.error('Error syncing user data:', error);
-    }
+    // NOTE: removed automatic backend sync here. The signup form explicitly
+    // posts the full payload (including password and mobile) to /api/auth/signup.
+    // Leaving this helper returning the Firebase credential only to avoid creating
+    // partial DB rows with missing fields.
     return userCredential;
 };
 export const doSignInWithEmailAndPassword = (email, password) => {

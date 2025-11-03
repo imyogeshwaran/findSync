@@ -2,20 +2,15 @@
 CREATE DATABASE IF NOT EXISTS findsync;
 USE findsync;
 
--- Drop existing tables if they exist
-DROP TABLE IF EXISTS Matches;
-DROP TABLE IF EXISTS ItemImages;
-DROP TABLE IF EXISTS Contacts;
-DROP TABLE IF EXISTS Items;
-DROP TABLE IF EXISTS Users;
-
--- Create Users table
+-- Create Users table with all required fields (if not exists)
 CREATE TABLE IF NOT EXISTS Users (
     user_id INT AUTO_INCREMENT PRIMARY KEY,
     firebase_uid VARCHAR(128) UNIQUE NOT NULL,   
-    name VARCHAR(100) DEFAULT NULL,              
-    email VARCHAR(100) UNIQUE NOT NULL,          
-    phone VARCHAR(15) DEFAULT NULL,              
+    name VARCHAR(100) DEFAULT 'User',              
+    email VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci UNIQUE NOT NULL,          
+    phone VARCHAR(15) DEFAULT NULL,
+    mobile VARCHAR(15) DEFAULT NULL,
+    password VARCHAR(255) DEFAULT NULL,              
     location VARCHAR(100) DEFAULT NULL,          
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

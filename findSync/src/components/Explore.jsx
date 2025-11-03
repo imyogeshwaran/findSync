@@ -1,8 +1,94 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 
 export default function ExploreSection({ userItems = [], onViewItem }) {
   const [query, setQuery] = useState('');
   const [modalItem, setModalItem] = useState(null);
+  const [liveItems, setLiveItems] = useState([]);
+
+  // Initialize with userItems and update when they change
+  useEffect(() => {
+    setLiveItems(userItems);
+  }, [userItems]);
+
+  // Connect to Socket.IO for real-time updates
+  useEffect(() => {
+    const SOCKET_URL = 'http://localhost:3000';
+    let socket;
+
+    try {
+      // Create socket with auto-reconnection
+      socket = io(SOCKET_URL, {
+        transports: ['websocket'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+      });
+      
+      socket.on('connect', () => {
+        console.log('Explore connected to Socket.IO server');
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+      });
+
+      socket.on('new_item', (newItem) => {
+        console.log('Raw new item received:', newItem);
+        
+        // Transform the new item to match expected format
+        const formattedItem = {
+          id: newItem.id,
+          title: newItem.item_name,
+          description: newItem.description,
+          location: newItem.location,
+          image: newItem.image_url,
+          category: newItem.category,
+          postType: newItem.post_type,
+          ownerName: newItem.finder_name || 'Unknown',
+          ownerPhone: newItem.phone || newItem.mobile,
+          ownerLocation: newItem.location,
+          date: new Date().toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: '2-digit' 
+          })
+        };
+        
+        console.log('Formatted new item:', formattedItem);
+        
+        // Update state immutably to trigger re-render
+        setLiveItems(prev => {
+          // Check if item already exists
+          const exists = prev.some(item => item.id === formattedItem.id);
+          if (exists) {
+            return prev;
+          }
+          return [formattedItem, ...prev];
+        });
+      });
+
+      socket.on('disconnect', () => {
+        console.log('Socket disconnected. Attempting to reconnect...');
+      });
+
+      socket.on('reconnect', (attemptNumber) => {
+        console.log('Socket reconnected after', attemptNumber, 'attempts');
+      });
+    } catch (err) {
+      console.error('Socket initialization error:', err);
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('new_item');
+        socket.off('connect_error');
+        socket.off('disconnect');
+        socket.off('reconnect');
+        socket.disconnect();
+      }
+    };
+  }, []);
 
   // Sample data with geo coords (approximate)
   const items = [
@@ -12,8 +98,8 @@ export default function ExploreSection({ userItems = [], onViewItem }) {
     { id: 'e4', title: 'Passport Cover', description: 'Brown leather cover, no passport inside.', finder: 'Liam T.', image: 'https://images.unsplash.com/photo-1544198365-3cdb2dc6b3ef?q=80&w=1200&auto=format&fit=crop', location: 'Airport T3', lat: 28.55616, lon: 77.100281, date: '2025-09-11', ownerName: 'Anita Rao', ownerLocation: 'Dwarka, New Delhi', ownerPhone: '+91 98765 43210' },
   ];
 
-  // Combine sample items with user-submitted items
-  const allItems = [...items, ...userItems];
+  // Combine sample items with user-submitted items and real-time items
+  const allItems = [...items, ...liveItems];
 
   const filtered = allItems.filter((it) => {
     if (!query) return true;

@@ -14,11 +14,12 @@ async function logAuthEvent(type, user) {
 }
 
 function SignupForm({ onShowLogin, onAuthSuccess }) {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', mobile: '' });
   const [showPasswordSetup, setShowPasswordSetup] = useState(false);
-  const [pwForm, setPwForm] = useState({ password: '', confirm: '' });
+  const [pwForm, setPwForm] = useState({ password: '', confirm: '', mobile: '' });
   const [googleUser, setGoogleUser] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (!statusMsg) return;
@@ -33,14 +34,64 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const cred = await doCreateUserWithEmailAndPassword(formData.email, formData.password, formData.name);
-      await logAuthEvent('signup', cred.user);
-      setStatusMsg('Account created successfully!');
-      if (onAuthSuccess) onAuthSuccess(cred.user);
-      if (onShowLogin) onShowLogin();
+      // Validate required fields
+      const newErrors = {};
+      if (!formData.mobile) {
+        newErrors.mobile = 'Please enter a mobile number';
+      }
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
+        return;
+      }
+
+      // Create user in Firebase
+      const cred = await doCreateUserWithEmailAndPassword(formData.email, formData.password);
+      console.log('Firebase user created:', cred.user.uid);
+      
+      try {
+        await logAuthEvent('signup', cred.user);
+        
+        // Sync user data to SQL database (manual signup endpoint)
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            firebase_uid: cred.user.uid,
+            name: formData.name,
+            email: formData.email,
+            password: formData.password,
+            mobile: formData.mobile,
+            isGoogleAuth: false
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to sync user data with database');
+        }
+
+        const data = await response.json();
+        console.log('User synced successfully:', data);
+        
+        if (!data.token) {
+          throw new Error('No token received from server');
+        }
+        
+        // Store the token from backend
+        localStorage.setItem('token', data.token);
+        
+        setStatusMsg('Account created successfully!');
+        if (onAuthSuccess) onAuthSuccess(cred.user);
+        if (onShowLogin) onShowLogin();
+      } catch (error) {
+        console.error('Error during user sync:', error);
+        throw new Error('Failed to complete signup: ' + error.message);
+      }
     } catch (error) {
       alert(error.message);
-      console.error(error);
+      console.error('Signup error:', error);
     }
   };
 
@@ -163,6 +214,24 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="password">Password</label>
               <input id="password" name="password" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc' }} value={formData.password} onChange={handleChange} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label htmlFor="mobile">Mobile Number</label>
+              <input 
+                id="mobile" 
+                name="mobile" 
+                type="tel" 
+                placeholder="Enter your mobile number" 
+                required 
+                style={{ 
+                  padding: '0.75rem', 
+                  borderRadius: '6px', 
+                  border: errors.mobile ? '1px solid #ef4444' : '1px solid #ccc' 
+                }} 
+                value={formData.mobile} 
+                onChange={handleChange} 
+              />
+              {errors.mobile && <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{errors.mobile}</span>}
             </div>
             <button type="submit" style={{ padding: '0.75rem', borderRadius: '6px', background: '#222', color: 'white', fontWeight: 'bold', border: 'none', marginTop: '0.5rem' }}>Sign up</button>
           </div>

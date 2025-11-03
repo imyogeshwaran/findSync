@@ -3,8 +3,40 @@ const cors = require('cors');
 require('dotenv').config();
 const initializeDatabase = require('./config/initDatabase');
 const path = require('path');
+const http = require('http');
 
 const app = express();
+const server = http.createServer(app);
+const { Server } = require('socket.io');
+const io = new Server(server, {
+  cors: {
+    origin: ['http://localhost:5174', 'http://127.0.0.1:5174', 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    methods: ["GET", "POST"],
+    credentials: true,
+    allowedHeaders: ["my-custom-header"],
+  },
+  pingTimeout: 60000,
+  pingInterval: 25000
+});
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
+
+  socket.on('disconnect', (reason) => {
+    console.log('Client disconnected:', socket.id, 'Reason:', reason);
+  });
+
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
+});
+
+// Handle errors at the IO level
+io.engine.on("connection_error", (err) => {
+  console.error('Connection error:', err);
+});
+app.set('io', io);
 
 // Middleware
 app.use(cors({
@@ -116,12 +148,19 @@ async function startServer() {
   try {
     // Initialize database schema
     await initializeDatabase();
-    
     // Start server
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`\n🚀 Server is running on port ${PORT}`);
       console.log(`📍 API: http://localhost:${PORT}`);
       console.log(`💚 Health: http://localhost:${PORT}/health\n`);
+      console.log(`🔌 Socket.IO running on port ${PORT}`);
+    });
+    // Socket.IO connection event
+    io.on('connection', (socket) => {
+      console.log('A user connected:', socket.id);
+      socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+      });
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);
@@ -131,4 +170,4 @@ async function startServer() {
 
 startServer();
 
-module.exports = app;
+module.exports = { app, server, io };
