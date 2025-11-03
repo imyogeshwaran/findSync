@@ -68,23 +68,32 @@ const apiRequest = async (url, options = {}) => {
 };
 
 // User API calls
-export const syncUserToBackend = async (firebaseUser) => {
+export const syncUserToBackend = async (firebaseUser, opts = {}) => {
   try {
+    // Allow callers to explicitly provide name/mobile (signup flows) when firebase user object
+    // may not yet contain updated profile fields. opts = { name, mobile }
+  // Do not send a placeholder name ('User') to the backend — send null/undefined if missing.
+  const name = opts.name ?? firebaseUser.displayName ?? firebaseUser.name ?? null;
+  const mobile = opts.mobile ?? firebaseUser.phoneNumber ?? firebaseUser.mobile ?? null;
+
     const response = await apiRequest('/users/sync', {
       method: 'POST',
       body: JSON.stringify({
         firebase_uid: firebaseUser.uid,
-        name: firebaseUser.displayName || 'User',
+        // Only include name/mobile if present (null will be sent as null which backend treats as missing)
+        name,
         email: firebaseUser.email,
+        mobile,
       }),
     });
 
-    // Store the JWT token
+    // Store the JWT token if backend provided one
     if (response.token) {
       setAuthToken(response.token);
     }
 
-    return response;
+    // Return the backend user object merged into the firebase user so UI gets authoritative fields
+    return response.user ? { ...firebaseUser, ...response.user } : firebaseUser;
   } catch (error) {
     console.error('Error syncing user:', error);
     throw error;

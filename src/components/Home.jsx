@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications } from '../services/api.js';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications, getUserProfile, getAuthToken } from '../services/api.js';
 import { io } from 'socket.io-client';
 
 // Success checkmark animation component
@@ -434,7 +434,8 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    password: ''
+    password: '',
+    mobile: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -463,25 +464,31 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
       } else {
         // Create new user
         const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-        // Update profile with display name
+        // Update profile with display name (this updates Firebase but sometimes local user object
+        // may not immediately include the new displayName, so we pass the name explicitly when syncing)
         await updateProfile(userCredential.user, {
           displayName: formData.name
         });
         firebaseUser = userCredential.user;
       }
       
-      // Sync user to MySQL backend
+      // Sync user to MySQL backend. Pass explicit name/mobile on signup so DB gets authoritative values
       try {
-        await syncUserToBackend(firebaseUser);
+        const syncOpts = {};
+        if (!isLogin) {
+          syncOpts.name = formData.name || undefined;
+          if (formData.mobile) syncOpts.mobile = formData.mobile;
+        }
+        await syncUserToBackend(firebaseUser, syncOpts);
         console.log('✅ User synced to backend successfully');
       } catch (syncError) {
         console.error('Failed to sync user to backend:', syncError);
         // Continue even if backend sync fails
       }
       
-      onAuthSuccess();
-      onClose();
-      setFormData({ name: '', email: '', password: '' });
+  onAuthSuccess();
+  onClose();
+  setFormData({ name: '', email: '', password: '', mobile: '' });
     } catch (err) {
       setError(err.message || 'Authentication failed');
     } finally {
@@ -535,6 +542,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
         
         <form onSubmit={handleSubmit}>
           {!isLogin && (
+            <>
             <div style={{ marginBottom: '16px' }}>
               <label style={{
                 display: 'block',
@@ -564,6 +572,36 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
                 placeholder="Enter your full name"
               />
             </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{
+                display: 'block',
+                marginBottom: '8px',
+                fontWeight: 500,
+                fontSize: '0.9rem',
+                opacity: 0.9
+              }}>
+                Mobile Number (optional)
+              </label>
+              <input
+                type="tel"
+                name="mobile"
+                value={formData.mobile}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  outline: 'none',
+                }}
+                placeholder="Your mobile number"
+              />
+            </div>
+            </>
           )}
 
           <div style={{ marginBottom: '16px' }}>
@@ -740,7 +778,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
             <li style={{ position: 'relative' }}
                 onMouseEnter={() => setAccountOpen(true)}
                 onMouseLeave={() => setAccountOpen(false)}>
-              <a href="#" style={linkStyle}>{user.displayName || 'Account'} ▾</a>
+              <a href="#" style={linkStyle}>{user.name || user.displayName || 'Account'} ▾</a>
               {accountOpen && (
                 <div style={{
                   position: 'absolute', top: 'calc(100% + 8px)', right: 0,
@@ -812,7 +850,7 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
             <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); setMobileOpen(false); }}>🔔 Notifications</a>
             {user ? (
               <details>
-                <summary style={{ cursor: 'pointer' }}>{user.displayName || 'Account'}</summary>
+                <summary style={{ cursor: 'pointer' }}>{user.name || user.displayName || 'Account'}</summary>
                 <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 8 }}>
                   <li>
                     <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block' }}>My Profile</a>
@@ -1164,7 +1202,7 @@ function ProfilePage({ user }) {
             margin: '0 auto 16px',
             color: '#fff'
           }}>
-            {user.displayName ? user.displayName.charAt(0).toUpperCase() : user.email.charAt(0).toUpperCase()}
+            {(user.name || user.displayName || user.email).charAt(0).toUpperCase()}
           </div>
           <h1 style={{ margin: '0 0 8px', fontSize: '2rem', fontWeight: 700 }}>My Profile</h1>
           <p style={{ margin: 0, opacity: 0.8 }}>Your account information</p>
@@ -1178,7 +1216,7 @@ function ProfilePage({ user }) {
             border: '1px solid rgba(255,255,255,0.1)'
           }}>
             <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Full Name</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.displayName || 'Not provided'}</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.name || user.displayName || 'Not provided'}</div>
           </div>
 
           <div style={{
@@ -1189,6 +1227,16 @@ function ProfilePage({ user }) {
           }}>
             <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Email Address</div>
             <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.email}</div>
+          </div>
+
+          <div style={{
+            padding: '16px',
+            background: 'rgba(0,0,0,0.3)',
+            borderRadius: '12px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <div style={{ fontSize: '0.85rem', opacity: 0.7, marginBottom: '4px' }}>Mobile Number</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600 }}>{user.mobile || user.phone || 'Not provided'}</div>
           </div>
 
           <div style={{
@@ -1328,22 +1376,40 @@ export default function Home() {
   // Listen for authentication state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      // Fetch items whenever auth state changes so we always have latest
-      fetchMissingItems();
-      
-      // Sync user to backend when logged in
+      // Sync user to backend when logged in, and set user state with backend name
       if (currentUser) {
         try {
-          await syncUserToBackend(currentUser);
+          const mergedUser = await syncUserToBackend(currentUser);
+          setUser(mergedUser);
           console.log('✅ User synced on auth state change');
         } catch (error) {
+          setUser(currentUser); // fallback to Firebase user
           console.error('Failed to sync user:', error);
         }
       } else {
-        // Clear auth token when logged out
-        setAuthToken(null);
+        // No firebase user — but there may be a backend JWT (email/password login flow).
+        const token = getAuthToken();
+        if (token) {
+          try {
+            const profileRes = await getUserProfile();
+            if (profileRes && profileRes.user) {
+              setUser(profileRes.user);
+            } else {
+              setUser(null);
+              setAuthToken(null);
+            }
+          } catch (err) {
+            console.error('Failed to load profile with backend token:', err);
+            setUser(null);
+            setAuthToken(null);
+          }
+        } else {
+          setUser(null);
+          setAuthToken(null);
+        }
       }
+      // Fetch items whenever auth state changes so we always have latest
+      fetchMissingItems();
     });
     return () => unsubscribe();
   }, []);

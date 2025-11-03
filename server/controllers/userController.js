@@ -1,12 +1,15 @@
 const db = require('../config/database');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 // Sync Firebase user to MySQL
 exports.syncUser = async (req, res) => {
   try {
     console.log('syncUser called with body:', req.body);
-    const { firebase_uid, name, email, mobile, password, isGoogleAuth } = req.body;
+    // Accept either `mobile` or `phone` from the client (some forms send `phone`)
+    const { firebase_uid, name, email, mobile, phone, password, isGoogleAuth } = req.body;
+    const normalizedMobile = mobile || phone || null;
 
     if (!firebase_uid || !email) {
       return res.status(400).json({ error: 'Firebase UID and email are required' });
@@ -30,22 +33,24 @@ exports.syncUser = async (req, res) => {
       const updateFields = [];
       const updateValues = [];
 
-      // Keep existing values if the new ones aren't provided
-      if (name && (name !== 'User' || !existingUser.name)) {
+      // Keep existing values if the new ones aren't provided. Prefer meaningful names over the default 'User'.
+      if (name && name !== 'User' && name !== existingUser.name) {
         updateFields.push('name = ?');
         updateValues.push(name);
       }
-      if (email && (!existingUser.email || existingUser.email === 'undefined')) {
+      if (email && email !== existingUser.email) {
         updateFields.push('email = ?');
         updateValues.push(email);
       }
-      if (mobile && !existingUser.mobile) {
+      if (normalizedMobile && !existingUser.mobile) {
         updateFields.push('mobile = ?');
-        updateValues.push(mobile);
+        updateValues.push(normalizedMobile);
       }
       if (password && !existingUser.password) {
+        // Hash password before storing
+        const hashed = await bcrypt.hash(password, 10);
         updateFields.push('password = ?');
-        updateValues.push(password);
+        updateValues.push(hashed);
       }
 
       if (updateFields.length > 0) {
@@ -56,14 +61,18 @@ exports.syncUser = async (req, res) => {
         );
       }
 
-      // Build userRecord from DB row, prefer existing DB values if request omitted fields
-      const dbRow = existingUsers[0];
+      // Re-read the user row so we return the actual saved values
+      const [refreshed] = await db.query(
+        'SELECT user_id, firebase_uid, name, email, mobile FROM Users WHERE firebase_uid = ? OR email = ?',
+        [firebase_uid, email]
+      );
+      const dbRow = refreshed && refreshed[0] ? refreshed[0] : existingUser;
       userRecord = {
         user_id: dbRow.user_id,
         firebase_uid: dbRow.firebase_uid,
-        name: (typeof name !== 'undefined' && name !== null) ? name : dbRow.name,
-        email: (typeof email !== 'undefined' && email !== null) ? email : dbRow.email,
-        mobile: (typeof mobile !== 'undefined' && mobile !== null) ? mobile : dbRow.mobile || null
+        name: dbRow.name,
+        email: dbRow.email,
+        mobile: dbRow.mobile || null
       };
     } else {
       // Insert new user with all fields
@@ -73,23 +82,33 @@ exports.syncUser = async (req, res) => {
         ) VALUES (
           ?, ?, ?, ?, ?
         )`;
-      
+
+      // Hash password before insert if provided
+      const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+      // If name is not meaningful (e.g. 'User') store NULL so we don't persist a placeholder
       const insertValues = [
         firebase_uid,
-        name || 'User',  // Default to 'User' if name is not provided
+        name && name !== 'User' ? name : null,
         email,
-        mobile || null,
-        password || null
+        normalizedMobile,
+        hashedPassword
       ];
 
       console.log('Executing INSERT:', insertSql, insertValues);
       const [result] = await db.query(insertSql, insertValues);
+
+      // Read back the inserted row to get the real stored values
+      const [rowsAfterInsert] = await db.query(
+        'SELECT user_id, firebase_uid, name, email, mobile FROM Users WHERE user_id = ?',
+        [result.insertId]
+      );
+      const inserted = rowsAfterInsert && rowsAfterInsert[0] ? rowsAfterInsert[0] : null;
       userRecord = {
-        user_id: result.insertId,
+        user_id: inserted ? inserted.user_id : result.insertId,
         firebase_uid,
-        name: insertValues[insertFields.indexOf('name')] || null,
-        email: insertValues[insertFields.indexOf('email')] || null,
-        mobile: insertValues[insertFields.indexOf('mobile')] || null
+        name: inserted ? inserted.name : insertValues[1],
+        email: inserted ? inserted.email : insertValues[2],
+        mobile: inserted ? inserted.mobile : insertValues[3]
       };
     }
 
@@ -111,7 +130,8 @@ exports.syncUser = async (req, res) => {
         id: userId,
         firebase_uid: userRecord.firebase_uid,
         name: userRecord.name,
-        email: userRecord.email
+        email: userRecord.email,
+        mobile: userRecord.mobile || null
       }
     });
   } catch (error) {
@@ -126,7 +146,7 @@ exports.getUserProfile = async (req, res) => {
     const userId = req.user.id;
 
     const [users] = await db.query(
-      'SELECT user_id, firebase_uid, name, email, created_at FROM Users WHERE user_id = ?',
+      'SELECT user_id, firebase_uid, name, email, mobile, created_at FROM Users WHERE user_id = ?',
       [userId]
     );
 
@@ -135,8 +155,8 @@ exports.getUserProfile = async (req, res) => {
     }
 
     // Normalize to consistent response shape
-    const u = users[0];
-    res.json({ success: true, user: { id: u.user_id, firebase_uid: u.firebase_uid, name: u.name, email: u.email, created_at: u.created_at } });
+  const u = users[0];
+  res.json({ success: true, user: { id: u.user_id, firebase_uid: u.firebase_uid, name: u.name, email: u.email, mobile: u.mobile || null, created_at: u.created_at } });
   } catch (error) {
     console.error('Error getting user profile:', error);
     res.status(500).json({ error: 'Failed to get user profile' });

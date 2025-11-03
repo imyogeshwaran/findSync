@@ -11,6 +11,7 @@ import {
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
+import { setAuthToken } from '../services/api';
 import GoogleAuthModal from './GoogleAuthModal';
 
 const auth = getAuth();
@@ -108,10 +109,10 @@ export function LoginForm({
 
       const data = await response.json();
       
-      // Store the token
-      localStorage.setItem('token', data.token);
-      
-      // Redirect to home page
+      // Store the token using the shared helper so client code can read it
+      setAuthToken(data.token);
+
+      // Redirect to home page; Home component will read the token and fetch profile
       window.location.href = '/home';
     } catch (error) {
       console.error('Login error:', error);

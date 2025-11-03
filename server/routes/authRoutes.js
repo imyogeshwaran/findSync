@@ -3,13 +3,16 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const userController = require('../controllers/userController');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 // Route for handling manual signup
 router.post('/signup', async (req, res) => {
   try {
     console.log('auth/signup called with body:', req.body);
-    const { firebase_uid, name, email, mobile, password } = req.body;
+    // Accept `mobile` or `phone` from different clients
+    const { firebase_uid, name, email, mobile, phone, password } = req.body;
+    const normalizedMobile = mobile || phone || null;
 
     if (!firebase_uid || !email || !password) {
       return res.status(400).json({ error: 'Firebase UID, email, and password are required for manual signup' });
@@ -42,16 +45,21 @@ router.post('/signup', async (req, res) => {
       `;
       
       try {
-        await db.query(updateSql, [name, mobile, password, matchedUser.user_id]);
+        const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+        await db.query(updateSql, [name, normalizedMobile, hashedPassword, matchedUser.user_id]);
         console.log('Updated user profile successfully');
 
         // Generate JWT for the existing user
+        // Re-query user to include mobile and any updated fields
+        const [rows] = await db.query('SELECT user_id, firebase_uid, name, email, mobile FROM Users WHERE user_id = ?', [matchedUser.user_id]);
+        const updated = rows && rows[0] ? rows[0] : matchedUser;
+
         const token = jwt.sign(
           {
-            id: matchedUser.user_id,
-            firebase_uid: matchedUser.firebase_uid,
-            email: matchedUser.email,
-            name: name || matchedUser.name
+            id: updated.user_id,
+            firebase_uid: updated.firebase_uid,
+            email: updated.email,
+            name: updated.name
           },
           process.env.JWT_SECRET || 'dev-secret',
           { expiresIn: '7d' }
@@ -62,10 +70,11 @@ router.post('/signup', async (req, res) => {
           message: 'User profile updated successfully',
           token,
           user: {
-            id: matchedUser.user_id,
-            firebase_uid: matchedUser.firebase_uid,
-            email: matchedUser.email,
-            name: name || matchedUser.name
+            id: updated.user_id,
+            firebase_uid: updated.firebase_uid,
+            email: updated.email,
+            name: updated.name,
+            mobile: updated.mobile || null
           }
         });
       } catch (updateError) {
@@ -84,13 +93,14 @@ router.post('/signup', async (req, res) => {
       ) VALUES (
         ?, ?, ?, ?, ?, ?
       )`;
+    const hashedForInsert = password ? await bcrypt.hash(password, 10) : null;
     const values = [
       firebase_uid,
       name || null,
       email,
-      mobile || null,  // try mobile column
-      mobile || null,  // also update phone column for compatibility
-      password || null
+      normalizedMobile,  // try mobile column
+      normalizedMobile,  // also update phone column for compatibility
+      hashedForInsert
     ];
 
     console.log('Executing INSERT with SQL:', insertSql);
@@ -113,7 +123,8 @@ router.post('/signup', async (req, res) => {
           ) VALUES (
             ?, ?, ?, ?
           )`;
-        const fallbackValues = [firebase_uid, name || null, email, password || null];
+  const hashedFallback = password ? await bcrypt.hash(password, 10) : null;
+  const fallbackValues = [firebase_uid, name || null, email, hashedFallback];
         
         try {
           const [fallbackResult] = await db.query(fallbackSql, fallbackValues);
@@ -147,14 +158,19 @@ router.post('/signup', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    // Read back inserted user to include mobile
+    const [insertedRows] = await db.query('SELECT user_id, firebase_uid, name, email, mobile FROM Users WHERE user_id = ?', [userId]);
+    const inserted = insertedRows && insertedRows[0] ? insertedRows[0] : { user_id: userId, firebase_uid, name, email };
+
     return res.status(201).json({
       success: true,
       token,
       user: {
-        id: userId,
-        firebase_uid,
-        email,
-        name
+        id: inserted.user_id,
+        firebase_uid: inserted.firebase_uid,
+        email: inserted.email,
+        name: inserted.name,
+        mobile: inserted.mobile || null
       }
     });
 
@@ -199,7 +215,9 @@ router.post('/login', async (req, res) => {
         }
 
         const user = users[0];
-        if (user.password !== password) { // In production, use proper password hashing!
+        // Compare hashed password
+        const passwordMatches = user.password ? await bcrypt.compare(password, user.password) : false;
+        if (!passwordMatches) {
           return res.status(401).json({ error: 'Invalid email or password' });
         }
 
@@ -219,7 +237,7 @@ router.post('/login', async (req, res) => {
           
           // Update user info if it's changed
           if (user.name !== name || user.email !== email || user.firebase_uid !== firebase_uid) {
-            console.log('Updating existing user info:', {
+            console.log('Updating existing user info (safe update with COALESCE):', {
               oldName: user.name,
               newName: name,
               oldEmail: user.email,
@@ -227,9 +245,10 @@ router.post('/login', async (req, res) => {
               oldFirebaseUid: user.firebase_uid,
               newFirebaseUid: firebase_uid
             });
-            
+
+            // Use COALESCE so we don't overwrite existing DB values with NULL/empty values from the client
             await db.query(
-              'UPDATE Users SET name = ?, email = ?, firebase_uid = ? WHERE user_id = ?',
+              'UPDATE Users SET name = COALESCE(?, name), email = COALESCE(?, email), firebase_uid = COALESCE(?, firebase_uid) WHERE user_id = ?',
               [name, email, firebase_uid, userId]
             );
           }
@@ -256,15 +275,24 @@ router.post('/login', async (req, res) => {
         { expiresIn: '7d' }
       );
 
-      res.json({
-        token,
-        user: {
-          id: userId,
-          firebase_uid: userFirebaseUid,
-          email,
-          name: userName
-        }
-      });
+      // Re-read user to include mobile and authoritative name/email
+      try {
+        const [uRows] = await db.query('SELECT user_id, firebase_uid, name, email, mobile FROM Users WHERE user_id = ?', [userId]);
+        const u = uRows && uRows[0] ? uRows[0] : null;
+        res.json({
+          token,
+          user: {
+            id: u ? u.user_id : userId,
+            firebase_uid: u ? u.firebase_uid : userFirebaseUid,
+            email: u ? u.email : email,
+            name: u ? u.name : userName,
+            mobile: u ? u.mobile || null : null
+          }
+        });
+      } catch (readErr) {
+        console.warn('Could not re-query user after login:', readErr.message);
+        res.json({ token, user: { id: userId, firebase_uid: userFirebaseUid, email, name: userName } });
+      }
     } catch (dbError) {
       console.error('Database error during login:', dbError);
       res.status(500).json({ error: 'Database operation failed', details: process.env.NODE_ENV === 'development' ? dbError.message : undefined });
