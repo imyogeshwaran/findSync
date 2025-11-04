@@ -206,7 +206,7 @@ router.post('/login', async (req, res) => {
       // For regular login, check email and password
       if (isRegularLogin) {
         const [users] = await db.query(
-          'SELECT user_id, firebase_uid, name, email, password FROM Users WHERE LOWER(email) = LOWER(?)',
+          'SELECT user_id, firebase_uid, name, email, mobile, password FROM Users WHERE LOWER(email) = LOWER(?)',
           [email]
         );
 
@@ -221,9 +221,12 @@ router.post('/login', async (req, res) => {
           return res.status(401).json({ error: 'Invalid email or password' });
         }
 
+        // Keep existing user data - don't overwrite with nulls
         userId = user.user_id;
         userFirebaseUid = user.firebase_uid;
-        userName = user.name;
+        userName = user.name;  // Keep existing name
+        userEmail = user.email;
+        userMobile = user.mobile;
       } else {
         // For Firebase login, find user by firebase_uid or email
         const [existingUsers] = await db.query(
@@ -235,9 +238,25 @@ router.post('/login', async (req, res) => {
           const user = existingUsers[0];
           userId = user.user_id;
           
-          // Update user info if it's changed
-          if (user.name !== name || user.email !== email || user.firebase_uid !== firebase_uid) {
-            console.log('Updating existing user info (safe update with COALESCE):', {
+          // Only update if the new values are non-null and different from existing
+          let updateFields = [];
+          let updateValues = [];
+          
+          if (name && name !== 'User' && name !== user.name) {
+            updateFields.push('name = ?');
+            updateValues.push(name);
+          }
+          if (email && email !== user.email) {
+            updateFields.push('email = ?');
+            updateValues.push(email);
+          }
+          if (firebase_uid && firebase_uid !== user.firebase_uid) {
+            updateFields.push('firebase_uid = ?');
+            updateValues.push(firebase_uid);
+          }
+
+          if (updateFields.length > 0) {
+            console.log('Updating existing user info (preserving data):', {
               oldName: user.name,
               newName: name,
               oldEmail: user.email,
@@ -246,10 +265,10 @@ router.post('/login', async (req, res) => {
               newFirebaseUid: firebase_uid
             });
 
-            // Use COALESCE so we don't overwrite existing DB values with NULL/empty values from the client
+            updateValues.push(userId);
             await db.query(
-              'UPDATE Users SET name = COALESCE(?, name), email = COALESCE(?, email), firebase_uid = COALESCE(?, firebase_uid) WHERE user_id = ?',
-              [name, email, firebase_uid, userId]
+              `UPDATE Users SET ${updateFields.join(', ')} WHERE user_id = ?`,
+              updateValues
             );
           }
         } else {
