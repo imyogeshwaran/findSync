@@ -1,4 +1,22 @@
-<<<<<<< HEAD
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.schema-update
+
+# Build outputs
+dist/
+dist-ssr/
+build/
+out/
+
 # Logs
 logs
 *.log
@@ -7,11 +25,6 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
@@ -23,6 +36,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-=======
-node_modules
->>>>>>> 74b72b611fd382a9efd4bc7aacd483f612f077b5
+
+# Testing
+coverage/
+
+# Runtime data
+uploads/*
+!uploads/.gitkeep
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+*.local
+
+# Frontend specific
+.vite/
+
+# Backend specific
+server/public/uploads/*
+!server/public/uploads/.gitkeep
