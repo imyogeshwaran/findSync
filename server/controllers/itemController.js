@@ -23,48 +23,27 @@ exports.createMissingItem = async (req, res) => {
     let { item_name, description, location, category, phone, post_type, finder_name } = req.body;
     
     // Handle uploaded image file
-    // Instead of storing large base64 data in the DB (which can overflow column limits),
-    // save the file to disk under server/public/uploads and store a small URL path in DB.
+    // Since we're using multer.diskStorage(), the file is already saved to disk
+    // We just need to construct the URL path to store in the database
     let image_url = null;
+    console.log('Checking for uploaded file:', req.file);
     if (req.file) {
       try {
-        // Ensure uploads directory exists
-        const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
-        fs.mkdirSync(uploadsDir, { recursive: true });
-
-        // Determine extension from original name or fallback to jpg
-        const origName = req.file.originalname || '';
-        let ext = path.extname(origName).toLowerCase();
-        if (!ext) {
-          // Fallback by mimetype
-          if (req.file.mimetype === 'image/png') ext = '.png';
-          else if (req.file.mimetype === 'image/webp') ext = '.webp';
-          else if (req.file.mimetype === 'image/gif') ext = '.gif';
-          else ext = '.jpg';
-        }
-
-        const filename = `${Date.now()}-${Math.random().toString(36).slice(2,10)}${ext}`;
-        const filePath = path.join(uploadsDir, filename);
-
-        // Write buffer to disk
-        fs.writeFileSync(filePath, req.file.buffer);
-
-        // Store the accessible uploads path (served by server as /uploads/...)
-        // Use absolute URL so the browser loads image from backend (not from Vite dev server)
+        console.log('Processing uploaded file:', req.file);
+        // The file is already saved by multer.diskStorage()
+        // We just need to construct the relative URL path
+        const filename = req.file.filename;
         const relativePath = `/uploads/${filename}`;
-        const host = req.get && req.get('host') ? req.get('host') : (process.env.BACKEND_HOST || 'localhost:5000');
-        // Store just the relative path - the frontend will construct the full URL
         image_url = relativePath;
-        console.log('Saved uploaded image to', filePath, 'and stored image_url as', image_url);
-
-        // Create absolute URL for immediate Socket.IO broadcast
-        const baseUrl = `http://${host}`;
-        const absoluteImageUrl = `${baseUrl}${relativePath}`;
-      } catch (fsErr) {
-        console.error('Failed to save uploaded file to disk:', fsErr.message);
+        console.log('Using uploaded image from', req.file.path, 'and stored image_url as', image_url);
+      } catch (err) {
+        console.error('Error processing uploaded file:', err.message);
+        console.error('Error stack:', err.stack);
         // Keep image_url null so DB insert won't store an oversized value
         image_url = null;
       }
+    } else {
+      console.log('No file uploaded with request');
     }
 
     // Resolve user id and name from the token and database
@@ -157,6 +136,19 @@ exports.createMissingItem = async (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized: user id could not be resolved' });
     }
+    
+    // Verify that the user actually exists in the database
+    try {
+      const [users] = await db.query('SELECT user_id FROM Users WHERE user_id = ?', [userId]);
+      if (users.length === 0) {
+        console.error('User ID does not exist in database:', userId);
+        return res.status(401).json({ error: 'Unauthorized: invalid user id' });
+      }
+      console.log('Verified user exists in database:', userId);
+    } catch (userCheckErr) {
+      console.error('Error checking if user exists:', userCheckErr.message);
+      return res.status(500).json({ error: 'Failed to verify user' });
+    }
 
     console.log('=== INSERTING INTO DATABASE ===');
     console.log('post_type value being inserted:', validPostType);
@@ -223,24 +215,49 @@ exports.createMissingItem = async (req, res) => {
       }
 
   // Use database name as priority, then fallback to token name or finder_name
+  // Ensure we always have a valid finder_name value (never null or undefined)
   resolvedFinderName = userName !== 'Unknown' ? userName : (tokenName || finder_name || 'Unknown');
+  // Make sure finder_name is never null, undefined, or empty string
+  if (!resolvedFinderName || resolvedFinderName === 'Unknown') {
+    resolvedFinderName = 'Anonymous';
+  }
       console.log('Final resolved finder name:', resolvedFinderName);
 
   const insertValues = [userId, item_name, resolvedFinderName, description, location, image_url, category || 'Others', validPostType, phone];
       console.log('Full insert values (with finder_name):', insertValues);
-      [result] = await db.query(
-        `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        insertValues
-      );
+      console.log('Image URL value being inserted:', image_url);
+      try {
+        [result] = await db.query(
+          `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          insertValues
+        );
+        console.log('Database insertion successful, result:', result);
+      } catch (dbErr) {
+        console.error('Database insertion error (with finder_name):', dbErr.message);
+        console.error('Database error code:', dbErr.code);
+        console.error('Database error stack:', dbErr.stack);
+        console.error('Insert values that failed:', insertValues);
+        throw dbErr; // Re-throw to be caught by outer try-catch
+      }
     } else {
       const insertValues = [userId, item_name, description, location, image_url, category || 'Others', validPostType, phone];
       console.log('Full insert values (without finder_name):', insertValues);
-      [result] = await db.query(
-        `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        insertValues
-      );
+      console.log('Image URL value being inserted:', image_url);
+      try {
+        [result] = await db.query(
+          `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          insertValues
+        );
+        console.log('Database insertion successful, result:', result);
+      } catch (dbErr) {
+        console.error('Database insertion error (without finder_name):', dbErr.message);
+        console.error('Database error code:', dbErr.code);
+        console.error('Database error stack:', dbErr.stack);
+        console.error('Insert values that failed:', insertValues);
+        throw dbErr; // Re-throw to be caught by outer try-catch
+      }
     }
 
     console.log('Item inserted with ID:', result.insertId);
@@ -274,13 +291,16 @@ exports.createMissingItem = async (req, res) => {
     }
 
     // Verify insertion
+    console.log('Verifying insertion for item_id:', result.insertId);
     const [checkResult] = await db.query(
-      `SELECT post_type FROM Items WHERE item_id = ?`,
+      `SELECT item_id, post_type, image_url FROM Items WHERE item_id = ?`,
       [result.insertId]
     );
 
     if (checkResult.length > 0) {
-      console.log('VERIFICATION: post_type is now:', checkResult[0].post_type);
+      console.log('VERIFICATION SUCCESS: Found item in database:', checkResult[0]);
+    } else {
+      console.log('VERIFICATION FAILED: Item not found in database for item_id:', result.insertId);
     }
 
     // Emit real-time event to all connected clients

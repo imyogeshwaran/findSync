@@ -19,10 +19,10 @@ const upload = multer({
   },
   fileFilter: (req, file, cb) => {
     // Allow only image files. Be permissive on mimetype but verify extension too.
-    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/pjpeg', 'image/x-png', 'image/webp'];
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/pjpeg', 'image/x-png', 'image/webp', 'image/gif'];
     const ext = path.extname(file.originalname || '').toLowerCase();
     const isMimeOk = !!file.mimetype && (allowedMimes.includes(file.mimetype) || file.mimetype.startsWith('image/'));
-    const isExtOk = ['.jpg', '.jpeg', '.png', '.webp'].includes(ext);
+    const isExtOk = ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
 
     if (isMimeOk && isExtOk) {
       return cb(null, true);
@@ -30,7 +30,7 @@ const upload = multer({
 
     // Log details to help debugging unexpected mimetypes/extensions
     console.warn('Rejected file upload - mimetype:', file.mimetype, 'ext:', ext, 'originalname:', file.originalname);
-    cb(new Error('Only image files (jpeg, jpg, png, webp) are allowed!'));
+    cb(new Error('Only image files (jpeg, jpg, png, webp, gif) are allowed!'));
   }
 });
 
