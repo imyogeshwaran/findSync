@@ -1,102 +1,73 @@
+console.log('Loading initDatabase module');
 const db = require('./database');
 const fs = require('fs');
 const path = require('path');
+console.log('initDatabase module dependencies loaded');
 
 async function initializeDatabase() {
   try {
     console.log('🔄 Checking database for existing schema...');
+    console.log('Database config:', {
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER,
+      database: process.env.DB_NAME
+    });
 
-    // Never force init if tables exist
-    const forceInit = false;
-
-    // Check if the Users table exists in the current database
-    const [rows] = await db.query(
-      `SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'Users'`,
-      [process.env.DB_NAME]
-    );
-
-    // Check if finder_name column exists in Items table
-    let finderNameExists = false;
+    // Check database connection first
     try {
-      const [columns] = await db.query(
-        `SELECT COUNT(*) as cnt FROM information_schema.columns 
-         WHERE table_schema = ? AND table_name = 'Items' AND column_name = 'finder_name'`,
-        [process.env.DB_NAME]
-      );
-      finderNameExists = columns && columns[0] && columns[0].cnt > 0;
-    } catch (err) {
-      console.log('Note: Could not check for finder_name column:', err.message);
+      const connection = await db.getConnection();
+      console.log('✅ Database connection successful');
+      connection.release();
+    } catch (connErr) {
+      console.error('❌ Database connection failed:', connErr.message);
+      throw connErr;
     }
 
-    const exists = rows && rows[0] && rows[0].cnt > 0;
-
-    if (exists) {
-      console.log('ℹ️ Database tables already exist. Applying only schema updates if needed...');
-    } else {
-      console.log('✅ Running initial schema creation...');
+    // Check if tables exist
+    try {
+      const [usersResult] = await db.query('SELECT COUNT(*) as count FROM Users LIMIT 1');
+      const [itemsResult] = await db.query('SELECT COUNT(*) as count FROM Items LIMIT 1');
+      console.log('✅ Database tables exist');
+      console.log('Users table count:', usersResult[0].count);
+      console.log('Items table count:', itemsResult[0].count);
+    } catch (tableErr) {
+      console.log('❌ Database tables do not exist, creating them...');
+      
+      // Read and execute schema
       const schemaPath = path.join(__dirname, 'schema.sql');
       const schema = fs.readFileSync(schemaPath, 'utf8');
-
+      
       // Split by semicolon and execute each statement
       const statements = schema.split(';').filter(stmt => stmt.trim());
-
+      
       for (const statement of statements) {
         if (statement.trim()) {
           try {
             await db.query(statement);
+            console.log('✅ Executed:', statement.trim().split('\n')[0]);
           } catch (err) {
             // Log error but continue if it's just a "table exists" error
             if (!err.message.includes('already exists')) {
+              console.error('❌ Error executing statement:', err.message);
               throw err;
+            } else {
+              console.log('ℹ️  Statement skipped (already exists):', statement.trim().split('\n')[0]);
             }
           }
         }
       }
+      
+      console.log('✅ Database schema created successfully');
     }
 
-    // Apply schema fixes
-    console.log('✅ Applying schema fixes...');
-    const schemaFixPath = path.join(__dirname, 'ensure_schema.sql');
-    const schemaFix = fs.readFileSync(schemaFixPath, 'utf8');
-    
-    const fixStatements = schemaFix.split(';').filter(stmt => stmt.trim());
-    
-    for (const statement of fixStatements) {
-      if (statement.trim()) {
-        try {
-          await db.query(statement);
-        } catch (err) {
-          console.warn('Warning: Schema fix error (can be ignored if column exists):', err.message);
-        }
-      }
-    }
-
-    console.log('✅ Database schema initialized successfully');
-
-    // Apply schema updates if needed
-    if (!finderNameExists) {
-      console.log('🔄 Applying schema updates...');
-      const updatePath = path.join(__dirname, 'schema_update.sql');
-      if (fs.existsSync(updatePath)) {
-        const updates = fs.readFileSync(updatePath, 'utf8');
-        const updateStatements = updates.split(';').filter(stmt => stmt.trim());
-        
-        for (const statement of updateStatements) {
-          if (statement.trim()) {
-            try {
-              await db.query(statement);
-              console.log('✅ Applied schema update:', statement.trim().split('\n')[0]);
-            } catch (err) {
-              console.warn('⚠️ Schema update warning:', err.message);
-            }
-          }
-        }
-      }
-    }
+    console.log('✅ Database initialization completed');
   } catch (error) {
     console.error('❌ Error initializing database:', error.message);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }
 
+console.log('Exporting initializeDatabase function');
 module.exports = initializeDatabase;
+console.log('initializeDatabase function exported');

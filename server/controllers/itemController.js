@@ -374,6 +374,21 @@ checkPostTypeEnum();
 // Get all missing items
 exports.getAllMissingItems = async (req, res) => {
   try {
+    console.log('=====================================');
+    console.log('getAllMissingItems called');
+    console.log('Request headers:', req.headers);
+    console.log('Request origin:', req.get('Origin'));
+    
+    // Test database connection first
+    try {
+      const connection = await db.getConnection();
+      console.log('Database connection successful in getAllMissingItems');
+      connection.release();
+    } catch (connErr) {
+      console.error('Database connection failed in getAllMissingItems:', connErr.message);
+      return res.status(500).json({ error: 'Database connection failed', details: connErr.message });
+    }
+    
     const [items] = await db.query(
       `SELECT 
         i.*,
@@ -386,6 +401,8 @@ exports.getAllMissingItems = async (req, res) => {
        WHERE i.status = 'open'
        ORDER BY i.posted_at DESC`
     );
+    
+    console.log('Database query returned', items.length, 'items');
     
     // Transform the items to match frontend expectations
     const transformedItems = items.map(item => {
@@ -407,7 +424,13 @@ exports.getAllMissingItems = async (req, res) => {
       };
     });
     console.log('Backend sending transformed items count:', transformedItems.length);
-
+    
+    // Add CORS headers explicitly
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    console.log('Sending response with', transformedItems.length, 'items');
     res.json({ success: true, items: transformedItems });
   } catch (error) {
     console.error('Error getting missing items:', error);
@@ -481,7 +504,7 @@ exports.updateMissingItem = async (req, res) => {
     
     // Check if item exists and belongs to user
     const [items] = await db.query(
-      'SELECT * FROM missing_items WHERE id = ? AND user_id = ?',
+      'SELECT * FROM Items WHERE item_id = ? AND user_id = ?',
       [id, userId]
     );
     
@@ -490,10 +513,10 @@ exports.updateMissingItem = async (req, res) => {
     }
     
     await db.query(
-      `UPDATE missing_items 
-       SET name = ?, description = ?, location = ?, mobile = ?, image_url = ?, category = ?, status = ?
-       WHERE id = ? AND user_id = ?`,
-      [name, description, location, mobile, image_url, category, status || 'missing', id, userId]
+      `UPDATE Items 
+       SET item_name = ?, description = ?, location = ?, phone = ?, image_url = ?, category = ?, status = ?
+       WHERE item_id = ? AND user_id = ?`,
+      [name, description, location, mobile, image_url, category, status || 'open', id, userId]
     );
     
     res.json({ success: true, message: 'Item updated successfully' });
@@ -510,7 +533,7 @@ exports.deleteMissingItem = async (req, res) => {
     const userId = req.user.id;
     
     const [result] = await db.query(
-      'DELETE FROM missing_items WHERE id = ? AND user_id = ?',
+      'DELETE FROM Items WHERE item_id = ? AND user_id = ?',
       [id, userId]
     );
     
