@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS Items (
     location VARCHAR(100) NOT NULL,
     image_url VARCHAR(255),
     status ENUM('open', 'matched', 'closed') DEFAULT 'open',
+    approval_status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
     posted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
 )AUTO_INCREMENT = 101;
@@ -64,3 +65,13 @@ CREATE TABLE IF NOT EXISTS Matches (
     FOREIGN KEY (lost_item_id) REFERENCES Items(item_id),
     FOREIGN KEY (found_item_id) REFERENCES Items(item_id)
 )AUTO_INCREMENT = 100001;
+
+-- Create Admin table
+CREATE TABLE IF NOT EXISTS admin (
+    admin_id INT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    email VARCHAR(150) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (admin_id)
+) AUTO_INCREMENT = 10101;

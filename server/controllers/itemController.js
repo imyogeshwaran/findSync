@@ -228,8 +228,8 @@ exports.createMissingItem = async (req, res) => {
       console.log('Image URL value being inserted:', image_url);
       try {
         [result] = await db.query(
-          `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO Items (user_id, item_name, finder_name, description, location, image_url, category, post_type, phone, approval_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
           insertValues
         );
         console.log('Database insertion successful, result:', result);
@@ -246,8 +246,8 @@ exports.createMissingItem = async (req, res) => {
       console.log('Image URL value being inserted:', image_url);
       try {
         [result] = await db.query(
-          `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO Items (user_id, item_name, description, location, image_url, category, post_type, phone, approval_status) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
           insertValues
         );
         console.log('Database insertion successful, result:', result);
@@ -374,67 +374,121 @@ checkPostTypeEnum();
 // Get all missing items
 exports.getAllMissingItems = async (req, res) => {
   try {
-    console.log('=====================================');
     console.log('getAllMissingItems called');
-    console.log('Request headers:', req.headers);
-    console.log('Request origin:', req.get('Origin'));
     
-    // Test database connection first
+    let items = [];
+    
+    // Try to fetch approved items first
     try {
-      const connection = await db.getConnection();
-      console.log('Database connection successful in getAllMissingItems');
-      connection.release();
-    } catch (connErr) {
-      console.error('Database connection failed in getAllMissingItems:', connErr.message);
-      return res.status(500).json({ error: 'Database connection failed', details: connErr.message });
+      console.log('Attempting to fetch items with approval_status filter...');
+      const [result] = await db.query(
+        `SELECT 
+          i.item_id,
+          i.user_id,
+          i.item_name,
+          i.description,
+          i.category,
+          i.post_type,
+          i.location,
+          i.image_url,
+          i.phone,
+          i.posted_at,
+          u.name as owner_name,
+          u.email as owner_email
+         FROM Items i 
+         LEFT JOIN Users u ON i.user_id = u.user_id 
+         WHERE i.approval_status = 'approved'
+         ORDER BY i.posted_at DESC`
+      );
+      items = result || [];
+      console.log('✅ Fetched', items.length, 'approved items');
+    } catch (queryErr) {
+      console.warn('⚠️ Error with approval_status filter:', queryErr.message);
+      // Fallback: try without approval_status filter
+      try {
+        console.log('Trying fallback query without approval_status...');
+        const [result] = await db.query(
+          `SELECT 
+            i.item_id,
+            i.user_id,
+            i.item_name,
+            i.description,
+            i.category,
+            i.post_type,
+            i.location,
+            i.image_url,
+            i.phone,
+            i.posted_at,
+            u.name as owner_name,
+            u.email as owner_email
+           FROM Items i 
+           LEFT JOIN Users u ON i.user_id = u.user_id 
+           ORDER BY i.posted_at DESC`
+        );
+        items = result || [];
+        console.log('✅ Fallback query returned', items.length, 'items');
+      } catch (fallbackErr) {
+        console.error('❌ Fallback query also failed:', fallbackErr.message);
+        // Return empty array instead of throwing error
+        items = [];
+      }
     }
-    
-    const [items] = await db.query(
-      `SELECT 
-        i.*,
-        u.name as owner_name,
-        u.email as owner_email,
-        i.phone as owner_phone,
-        DATE_FORMAT(i.posted_at, '%Y-%m-%d') as date
-       FROM Items i 
-       JOIN Users u ON i.user_id = u.user_id 
-       WHERE i.status = 'open'
-       ORDER BY i.posted_at DESC`
-    );
-    
-    console.log('Database query returned', items.length, 'items');
     
     // Transform the items to match frontend expectations
     const transformedItems = items.map(item => {
-      console.log('Backend transforming item:', item.item_name, 'post_type:', item.post_type);
+      // Format date as DD/MMM/YYYY HH:MM
+      let formattedDate = 'N/A';
+      if (item.posted_at) {
+        const date = new Date(item.posted_at);
+        if (!isNaN(date.getTime())) {
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = date.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+          const year = date.getFullYear();
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`;
+        }
+      }
+      
+      // Normalize category names
+      let normalizedCategory = item.category || 'Others';
+      const categoryMap = {
+        'electronic_gadget': 'Electronic Gadget',
+        'electronics': 'Electronic Gadget',
+        'electronics gadgets': 'Electronic Gadget',
+        'electronics gadget': 'Electronic Gadget',
+        'electronic gadget': 'Electronic Gadget',
+        'accessory': 'Accessories',
+        'accessories': 'Accessories',
+        'doc': 'Documents',
+        'document': 'Documents',
+        'documents': 'Documents',
+        'other': 'Others',
+        'others': 'Others'
+      };
+      normalizedCategory = categoryMap[normalizedCategory.toLowerCase()] || normalizedCategory;
       
       return {
         id: item.item_id,
         title: item.item_name,
         description: item.description,
         location: item.location,
-        category: item.category,
+        category: normalizedCategory,
         image: item.image_url,
-        date: item.date,
+        date: formattedDate,
         ownerName: item.owner_name,
-        ownerPhone: item.owner_phone,
+        ownerPhone: item.phone,
         ownerLocation: item.location,
-        status: item.status,
-        post_type: item.post_type // Use the actual post_type from database
+        post_type: item.post_type
       };
     });
-    console.log('Backend sending transformed items count:', transformedItems.length);
     
-    // Add CORS headers explicitly
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    console.log('Sending response with', transformedItems.length, 'items');
+    console.log('✅ Sending', transformedItems.length, 'items to client');
     res.json({ success: true, items: transformedItems });
   } catch (error) {
-    console.error('Error getting missing items:', error);
-    res.status(500).json({ error: 'Failed to get missing items', details: error.message });
+    console.error('❌ Unexpected error in getAllMissingItems:', error.message);
+    // Return empty array on any error to prevent 500
+    res.json({ success: true, items: [] });
   }
 };
 

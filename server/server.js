@@ -116,6 +116,8 @@ console.log('Loading contact routes...');
 const contactRoutes = require('./routes/contactRoutes');
 console.log('Loading auth routes...');
 const authRoutes = require('./routes/authRoutes');
+console.log('Loading admin routes...');
+const adminRoutes = require('./routes/adminRoutes');
 
 console.log('Route modules loaded');
 
@@ -139,6 +141,8 @@ console.log('Connecting /api/contacts routes...');
 app.use('/api/contacts', contactRoutes);
 console.log('Connecting /api/auth routes...');
 app.use('/api/auth', authRoutes);
+console.log('Connecting /api/admin routes...');
+app.use('/api/admin', adminRoutes);
 console.log('✅ All API routes connected');
 
 // Log all registered routes for debugging
