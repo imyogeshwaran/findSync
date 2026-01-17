@@ -1,9 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Threads from '../components/Prism.jsx';
+import NotificationsPanel from '../components/NotificationsPanel.jsx';
+import NotificationBellIcon from '../assets/NotificationBell.svg';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
-import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications, getUserProfile, getAuthToken } from '../services/api.js';
-import { io } from 'socket.io-client';
+import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications, getUserProfile, getAuthToken, getNotificationCount } from '../services/api.js';
+
+// Helper function to format date as DD/MMM/YYYY HH:MM
+const formatDateTime = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'N/A';
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = date.toLocaleString('en-US', { month: 'short' }).toLowerCase();
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
 
 // Success checkmark animation component
 const CheckmarkAnimation = () => (
@@ -115,6 +129,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
     description: '',
     location: '',
     phone: '',
+    post_type: 'select',
+    category: 'select',
     image: null,
     preview: null
   });
@@ -154,6 +170,17 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       return;
     }
     
+    // Validate dropdown selections
+    if (formData.post_type === 'select') {
+      alert('Please select a Post Type');
+      return;
+    }
+    
+    if (formData.category === 'select') {
+      alert('Please select a Category');
+      return;
+    }
+    
     console.log('All validation passed, submitting form');
     onSubmit(formData);
     
@@ -163,6 +190,8 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
       description: '',
       location: '',
       phone: '',
+      post_type: 'select',
+      category: 'select',
       image: null,
       preview: null
     });
@@ -307,7 +336,75 @@ function AddItemModal({ isOpen, onClose, onSubmit, isSubmitting, showSuccess }) 
               fontSize: '0.9rem',
               opacity: 0.9
             }}>
-              Location Where Lost
+              Post Type
+            </label>
+            <select
+              name="post_type"
+              value={formData.post_type}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="select" style={{ background: '#1a1a1a', color: '#999' }}>Select Post Type</option>
+              <option value="lost" style={{ background: '#1a1a1a', color: '#fff' }}>Lost - Owner looking for this</option>
+              <option value="found" style={{ background: '#1a1a1a', color: '#fff' }}>Found - Anyone looking for this</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Category
+            </label>
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              required
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(0,0,0,0.35)',
+                color: '#fff',
+                fontSize: '1rem',
+                outline: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <option value="select" style={{ background: '#1a1a1a', color: '#999' }}>Select Category</option>
+              <option value="Electronic Gadget" style={{ background: '#1a1a1a', color: '#fff' }}>Electronic Gadget</option>
+              <option value="Accessories" style={{ background: '#1a1a1a', color: '#fff' }}>Accessories</option>
+              <option value="Documents" style={{ background: '#1a1a1a', color: '#fff' }}>Documents</option>
+              <option value="Others" style={{ background: '#1a1a1a', color: '#fff' }}>Others</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontWeight: 500,
+              fontSize: '0.9rem',
+              opacity: 0.9
+            }}>
+              Location Where {formData.post_type === 'lost' ? 'Lost' : formData.post_type === 'found' ? 'Found' : ''}
             </label>
             <input
               type="text"
@@ -726,6 +823,7 @@ function AuthModal({ isOpen, onClose, onAuthSuccess }) {
 }
 
 function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
+  console.log('Navbar component rendered with user:', user);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
 
@@ -743,6 +841,23 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
     border: '1px solid rgba(255,255,255,0.5)',
     background: 'rgba(255,255,255,0.1)'
   };
+  
+  const handleNavigate = (view) => {
+    console.log('Navbar navigating to view:', view);
+    onNavigate(view);
+  };
+  
+  const handleAuthClick = () => {
+    console.log('Navbar auth button clicked');
+    onAuthClick();
+  };
+  
+  const handleLogout = () => {
+    console.log('Navbar logout button clicked');
+    onLogout();
+  };
+  
+  console.log('Navbar rendering with accountOpen:', accountOpen, 'mobileOpen:', mobileOpen);
 
   return (
     <header
@@ -767,13 +882,15 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
       {/* Right: Desktop Nav */}
       <nav aria-label="Main" style={{ display: 'none' }} className="nav-desktop">
         <ul style={{ listStyle: 'none', display: 'flex', gap: '20px', margin: 0, padding: 0, alignItems: 'center' }}>
-          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); }}>Home</a></li>
-          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); }}>Explore</a></li>
-          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked'); onNavigate('find'); }}>Find</a></li>
+          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); handleNavigate('home'); }}>Home</a></li>
+          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); handleNavigate('explore'); }}>Explore</a></li>
+          <li><a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked'); handleNavigate('find'); }}>Find</a></li>
           {user ? (
             <>
             <li>
-              <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); }} title="Notifications">🔔</a>
+              <a href="#" style={{ ...linkStyle, display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => { e.preventDefault(); handleNavigate('notifications'); }} title="Notifications">
+                <img src={NotificationBellIcon} alt="Notifications" style={{ width: '20px', height: '20px' }} />
+              </a>
             </li>
             <li style={{ position: 'relative' }}
                 onMouseEnter={() => setAccountOpen(true)}
@@ -791,10 +908,10 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
                 }}>
                   <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'grid', gap: 6 }}>
                     <li>
-                      <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); handleNavigate('profile'); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8 }}>My Profile</a>
                     </li>
                     <li>
-                      <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8, color: '#f87171' }}>Logout</a>
+                      <a href="#" onClick={(e) => { e.preventDefault(); handleLogout(); }} style={{ ...linkStyle, display: 'block', padding: '8px 10px', borderRadius: 8, color: '#f87171' }}>Logout</a>
                     </li>
                   </ul>
                 </div>
@@ -844,24 +961,27 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
             <button onClick={() => setMobileOpen(false)} style={{ ...btnStyle, padding: '6px 10px' }}>Close</button>
           </div>
           <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('home'); setMobileOpen(false); }}>Home</a>
-            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('explore'); setMobileOpen(false); }}>Explore</a>
-            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked (mobile)'); onNavigate('find'); setMobileOpen(false); }}>Find</a>
-            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); onNavigate('notifications'); setMobileOpen(false); }}>🔔 Notifications</a>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); handleNavigate('home'); setMobileOpen(false); }}>Home</a>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); handleNavigate('explore'); setMobileOpen(false); }}>Explore</a>
+            <a href="#" style={linkStyle} onClick={(e) => { e.preventDefault(); console.log('🔍 Find button clicked (mobile)'); handleNavigate('find'); setMobileOpen(false); }}>Find</a>
+            <a href="#" style={{ ...linkStyle, display: 'flex', alignItems: 'center', gap: '6px' }} onClick={(e) => { e.preventDefault(); handleNavigate('notifications'); setMobileOpen(false); }}>
+              <img src={NotificationBellIcon} alt="Notifications" style={{ width: '20px', height: '20px' }} />
+              Notifications
+            </a>
             {user ? (
               <details>
                 <summary style={{ cursor: 'pointer' }}>{user.name || user.displayName || 'Account'}</summary>
                 <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 8 }}>
                   <li>
-                    <a href="#" onClick={(e) => { e.preventDefault(); onNavigate('profile'); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block' }}>My Profile</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); handleNavigate('profile'); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block' }}>My Profile</a>
                   </li>
                   <li>
-                    <a href="#" onClick={(e) => { e.preventDefault(); onLogout(); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block', color: '#f87171' }}>Logout</a>
+                    <a href="#" onClick={(e) => { e.preventDefault(); handleLogout(); setMobileOpen(false); }} style={{ ...linkStyle, display: 'block', color: '#f87171' }}>Logout</a>
                   </li>
                 </ul>
               </details>
             ) : (
-              <button onClick={() => { onAuthClick(); setMobileOpen(false); }} style={{ ...btnPrimary, width: '100%' }}>Sign In</button>
+              <button onClick={() => { handleAuthClick(); setMobileOpen(false); }} style={{ ...btnPrimary, width: '100%' }}>Sign In</button>
             )}
           </div>
         </div>
@@ -881,22 +1001,12 @@ function Navbar({ onNavigate = () => {}, user, onAuthClick, onLogout }) {
 }
 
 // Inline Explore section with images, finder, description, and "near me" filtering
-function ExploreSection({ userItems = [] }) {
+function ExploreSection({ userItems = [], currentUser = null }) {
   const [query, setQuery] = useState('');
   const [modalItem, setModalItem] = useState(null);
   const [notifyOpenId, setNotifyOpenId] = useState(null);
   const [notifyMessage, setNotifyMessage] = useState('');
   const [sendingNotify, setSendingNotify] = useState(false);
-
-  // Sample data with geo coords (approximate)
-  const items = [
-    { id: 'sample-e1', title: 'Silver Bracelet', description: 'Found near the fountain. Looks like a charm bracelet.', finder: 'Aisha M.', image: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop', location: 'Central Park', lat: 40.785091, lon: -73.968285, date: '2025-09-14', ownerName: 'Priya Sharma', ownerLocation: 'Upper West Side, NYC', ownerPhone: '+1 555-123-7788' },
-    { id: 'sample-e2', title: 'Laptop Sleeve', description: 'Grey 13-inch sleeve with a sticker on it.', finder: 'Rahul S.', image: 'https://images.unsplash.com/photo-1457301547460-216da1913dc0?q=80&w=1200&auto=format&fit=crop', location: 'City Library', lat: 40.753182, lon: -73.982253, date: '2025-09-13', ownerName: 'Daniel Kim', ownerLocation: 'Midtown East, NYC', ownerPhone: '+1 555-987-4421' },
-    { id: 'sample-e3', title: 'Sports Bottle', description: 'Blue bottle with name initials "KJ".', finder: 'Meera P.', image: 'https://images.unsplash.com/photo-1597481499750-3e6c4b532c9b?q=80&w=1200&auto=format&fit=crop', location: 'Riverside Walk', lat: 40.8, lon: -73.985, date: '2025-09-12', ownerName: 'Karan Joshi', ownerLocation: 'Harlem, NYC', ownerPhone: '+1 555-332-1144' },
-    { id: 'sample-e4', title: 'Passport Cover', description: 'Brown leather cover, no passport inside.', finder: 'Liam T.', image: 'https://images.unsplash.com/photo-1544198365-3cdb2dc6b3ef?q=80&w=1200&auto=format&fit=crop', location: 'Airport T3', lat: 28.55616, lon: 77.100281, date: '2025-09-11', ownerName: 'Anita Rao', ownerLocation: 'Dwarka, New Delhi', ownerPhone: '+91 98765 43210' },
-  ];
-
-  const uniqueLocations = ['All', ...Array.from(new Set(items.map(i => i.location)))];
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = (d) => (d * Math.PI) / 180;
@@ -908,8 +1018,9 @@ function ExploreSection({ userItems = [] }) {
     return R * c;
   }
 
-  // Combine sample items with user-submitted items
-  const allItems = [...items, ...userItems];
+  // Use only user-submitted items
+  const allItems = userItems;
+  const uniqueLocations = ['All', ...Array.from(new Set(userItems.map(i => i.location || 'Unknown')))];
 
   const filtered = allItems.filter((it) => {
     if (!query) return true;
@@ -1019,12 +1130,13 @@ function ExploreSection({ userItems = [] }) {
                 {it.description}
               </p>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-                Owner: <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
+                <strong>{it.post_type === 'found' ? 'Finder:' : 'Owner:'}</strong> <strong>{it.ownerName}</strong> • 📍 {it.ownerLocation}
               </div>
               <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
                 📞 {it.ownerPhone || 'No phone provided'}
               </div>
-              {it.finder && it.finder !== 'Missing Item' && (
+              {/* Display finder information based on post_type */}
+              {it.post_type === 'found' && it.finder && it.finder !== 'Missing Item' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
                   <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                     {it.finder.charAt(0)}
@@ -1034,13 +1146,26 @@ function ExploreSection({ userItems = [] }) {
                   </div>
                 </div>
               )}
-              {it.finder === 'Missing Item' && (
-                <div style={{ marginTop: 10, padding: '8px 12px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', fontSize: 13 }}>
-                  🔍 <strong>Missing Item</strong> - Owner looking for this
-                </div>
-              )}
+              {/* Display badge based on post_type */}
+              <div style={{ 
+                marginTop: 10, 
+                padding: '8px 12px', 
+                background: it.post_type === 'found' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                border: `1px solid ${it.post_type === 'found' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, 
+                borderRadius: '8px', 
+                fontSize: 13,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ fontSize: '1rem' }}>
+                  {it.post_type === 'found' ? '✓' : '🔍'}
+                </span>
+                <strong>{it.post_type === 'found' ? 'Found Item' : 'Lost Item'}</strong> - 
+                {it.post_type === 'found' ? 'Anyone looking for this' : 'Owner looking for this'}
+              </div>
               <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                Found at: {it.location}{it.distanceKm != null ? ` • ~${it.distanceKm} km away` : ''} • {it.date}
+                <strong>{it.post_type === 'found' ? 'Found at:' : 'Lost at:'}</strong> {it.location}{it.distanceKm != null ? ` • ~${it.distanceKm} km away` : ''} • {it.date}
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
                 <button
@@ -1074,9 +1199,22 @@ function ExploreSection({ userItems = [] }) {
                           if (!notifyMessage || notifyMessage.trim().length === 0) return alert('Please enter a message');
                           try {
                             setSendingNotify(true);
-                            // Server will resolve item owner from item_id; no need to fetch details here
-                            // If API helper not available, just call createContact with item id and message
-                            await createContact({ item_id: it.id, message: notifyMessage });
+                            // Extract numeric item ID (remove 'api-' prefix if present)
+                            const rawId = it.id;
+                            const itemId = it.id.startsWith('api-') ? parseInt(it.id.replace('api-', '')) : it.id;
+                            const token = getAuthToken();
+                            console.log('📤 NOTIFICATION DEBUG:', {
+                              rawId,
+                              isApiPrefix: rawId.startsWith('api-'),
+                              itemId,
+                              itemIdType: typeof itemId,
+                              message: notifyMessage,
+                              hasToken: !!token,
+                              tokenLength: token ? token.length : 0,
+                              itemDetails: { title: it.title, ownerName: it.ownerName, ownerPhone: it.ownerPhone }
+                            });
+                            console.log('🚀 Calling createContact with:', { item_id: itemId, message: notifyMessage });
+                            await createContact({ item_id: itemId, message: notifyMessage });
                             alert('Notification sent to the item owner');
                             setNotifyMessage('');
                             setNotifyOpenId(null);
@@ -1093,6 +1231,22 @@ function ExploreSection({ userItems = [] }) {
                         Send
                       </button>
                     </div>
+                  ) : (currentUser && it.ownerName === (currentUser.name || currentUser.displayName)) ? (
+                    <button
+                      disabled
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.22)',
+                        background: 'rgba(100,100,100,0.35)',
+                        color: '#888',
+                        cursor: 'not-allowed',
+                      }}
+                      title="You cannot message yourself"
+                    >
+                      Your Item
+                    </button>
                   ) : (
                     <button
                       onClick={() => { setNotifyOpenId(it.id); setNotifyMessage(''); }}
@@ -1276,102 +1430,86 @@ function ProfilePage({ user }) {
   );
 }
 
-// Notifications page component
+// Notifications page component - Now uses NotificationsPanel
 function NotificationsSection() {
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        setLoading(true);
-        const res = await getNotifications();
-        if (mounted && res && res.notifications) setNotifications(res.notifications);
-      } catch (err) {
-        console.error('Failed to load notifications:', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, []);
-
-  return (
-    <section style={{ padding: 20 }}>
-      <h2 style={{ marginTop: 0 }}>Notifications</h2>
-      {loading ? (
-        <div>Loading...</div>
-      ) : notifications.length === 0 ? (
-        <div style={{ opacity: 0.8 }}>No notifications yet.</div>
-      ) : (
-        <div style={{ display: 'grid', gap: 12 }}>
-          {notifications.map(n => (
-            <div key={n.contact_id} style={{ padding: 12, borderRadius: 8, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ fontSize: 13, opacity: 0.9 }}><strong>{n.sender_name || n.sender_email || 'Someone'}</strong> • <span style={{ fontSize: 12, opacity: 0.7 }}>{new Date(n.contact_date).toLocaleString()}</span></div>
-              <div style={{ marginTop: 8 }}>{n.message}</div>
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>Regarding item id: <strong>{n.item_id}</strong></div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
+  return <NotificationsPanel />;
 }
 
 const SOCKET_URL = 'http://localhost:3000'; // Change if your backend runs elsewhere
 
+console.log('Loading Home component');
 export default function Home() {
+  console.log('Home component initialized');
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('All');
-  const [view, setView] = useState('explore'); // 'explore', 'find', or 'profile'
-  
-  // Debug: Log view changes
-  useEffect(() => {
-    console.log('🔄 Current view changed to:', view);
-  }, [view]);
-  const [userItems, setUserItems] = useState([]); // User-submitted missing items (offline/local only)
-  const [missingItems, setMissingItems] = useState([]); // Items fetched from backend
-  const [showAddModal, setShowAddModal] = useState(false); // Control modal visibility
-  const [showAuthModal, setShowAuthModal] = useState(false); // Control auth modal visibility
-  const [modalItem, setModalItem] = useState(null); // Currently selected item for details modal
-  const [user, setUser] = useState(null); // Current authenticated user
+  const [view, setView] = useState('home'); // 'explore', 'find', or 'profile'
+  const [missingItems, setMissingItems] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [items, setItems] = useState([]); // or whatever your main item state is
-
+  const [userItems, setUserItems] = useState([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [modalItem, setModalItem] = useState(null);
+  
+  // Add debugging for view changes
+  const setViewWithDebug = (newView) => {
+    console.log('View changing from', view, 'to', newView);
+    setView(newView);
+  };
+  
+  // Add effect to monitor view changes
+  useEffect(() => {
+    console.log('View state changed to:', view);
+  }, [view]);
+  
+  // ... rest of the code remains the same ...
   // Fetch missing items from backend
   const fetchMissingItems = async () => {
     try {
       console.log('🔄 Fetching missing items...');
       const res = await getAllMissingItems();
-      console.log('📦 API Response:', res);
+      console.log('✅ Fetched missing items:', res);
       if (res && res.items) {
         const mappedItems = res.items.map((it, index) => ({
-          id: it.item_id ? `api-${it.item_id}` : `missing-${index}-${Date.now()}`,
-          title: it.item_name,
+          id: it.id ? `api-${it.id}` : `missing-${index}-${Date.now()}`,
+          title: it.name || it.item_name, // API returns 'name' from transformation
           description: it.description,
           location: it.location,
-          date: new Date(it.posted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' }),
-          image: it.image_url || 'https://share.google/images/RBfyrVF2BeKzIZv1O',
+          date: it.created_at || it.date, // Use the formatted date from backend
+          image: it.image_url ? `http://localhost:3005${it.image_url}` : 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?w=400',
           ownerName: it.owner_name || 'Unknown',
-          ownerPhone: it.ownerPhone,
+          ownerPhone: it.phone || it.ownerPhone, // API returns 'phone' from transformation
           ownerLocation: it.location,
           category: it.category || 'Others',
           status: it.status,
-          finder: 'Missing Item'
+          finder: 'Missing Item',
+          post_type: it.post_type
         }));
         console.log('✅ Mapped items:', mappedItems);
         console.log('📱 Phone numbers check:', mappedItems.map(item => ({ title: item.title, phone: item.ownerPhone })));
         setMissingItems(mappedItems);
+        setFiltered(mappedItems);
       } else {
         console.log('⚠️ No items in response or invalid response structure');
       }
     } catch (err) {
       console.error('❌ Failed to fetch missing items:', err);
+      setError(err.message);
     }
   };
+
+  // Fetch items on component mount and when view changes
+  useEffect(() => {
+    console.log('useEffect called with view:', view);
+    if (view === 'home') {
+      console.log('Calling fetchMissingItems');
+      fetchMissingItems();
+    }
+  }, [view]);
 
   // Listen for authentication state changes
   useEffect(() => {
@@ -1428,12 +1566,15 @@ export default function Home() {
 
   // Placeholder items for browsing; replace with real data later
   // Filter and display items from the database
-  const filtered = missingItems.filter((it) => {
-    const matchesCategory = category === 'All' || it.category === category;
-    const q = query.trim().toLowerCase();
-    const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.location.toLowerCase().includes(q);
-    return matchesCategory && matchesQuery;
-  });
+  useEffect(() => {
+    const filteredItems = missingItems.filter((it) => {
+      const matchesCategory = category === 'All' || it.category === category;
+      const q = query.trim().toLowerCase();
+      const matchesQuery = !q || it.title.toLowerCase().includes(q) || it.location.toLowerCase().includes(q);
+      return matchesCategory && matchesQuery;
+    });
+    setFiltered(filteredItems);
+  }, [missingItems, category, query]);
 
   // Debug: Log data for home page
   console.log('🏠 Home page data:', {
@@ -1448,18 +1589,23 @@ export default function Home() {
   const handleAddItem = async (formData) => {
     setIsSubmitting(true);
     try {
-      console.log('Form data before submission:', JSON.stringify(formData, null, 2));
+      console.log('Form data before submission:', formData);
       
-      const submitData = {
-        item_name: formData.item_name,
-        description: formData.description,
-        location: formData.location,
-        phone: formData.phone,
-        image_url: formData.preview,
-        category: formData.category || 'Others'
-      };
+      // Create FormData to handle file upload
+      const submitData = new FormData();
+      submitData.append('item_name', formData.item_name);
+      submitData.append('description', formData.description);
+      submitData.append('location', formData.location);
+      submitData.append('phone', formData.phone);
+      submitData.append('post_type', formData.post_type);
+      submitData.append('category', formData.category);
       
-      console.log('Prepared submission data:', JSON.stringify(submitData, null, 2));
+      // Add image file if present
+      if (formData.image) {
+        submitData.append('image', formData.image);
+      }
+      
+      console.log('Prepared submission data with FormData');
       
       await createMissingItem(submitData);
       // Show success animation
@@ -1485,7 +1631,8 @@ export default function Home() {
         ownerLocation: formData.location,
         ownerPhone: formData.phone,
         finder: 'Missing Item',
-        category: formData.category || 'Others'
+        post_type: formData.post_type,
+        category: formData.category || 'other'
       };
       setUserItems(prev => [newItem, ...prev]);
       setShowAddModal(false);
@@ -1496,28 +1643,14 @@ export default function Home() {
 
   useEffect(() => {
     // Fetch initial items as usual
-    getAllMissingItems().then(data => {
-      if (data && data.items) setItems(data.items);
-    });
-
-    // Set up Socket.IO connection
-    const socket = io(SOCKET_URL, { transports: ['websocket'] });
-    socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
-    });
-    socket.on('new_item', (item) => {
-      console.log('Received new item via socket:', item);
-      setItems(prev => [item, ...prev]); // Prepend new item
-    });
-    return () => {
-      socket.disconnect();
-    };
+    console.log('Initial useEffect called');
+    fetchMissingItems();
   }, []);
 
   return (
     <div style={{ background: '#0b0b0b', minHeight: '100vh', color: '#ffffff', position: 'relative', overflowX: 'hidden', overflowY: 'auto' }}>
       <Navbar 
-        onNavigate={setView} 
+        onNavigate={setViewWithDebug} 
         user={user} 
         onAuthClick={() => setShowAuthModal(true)}
         onLogout={handleLogout}
@@ -1580,9 +1713,9 @@ export default function Home() {
                   }}
                 >
                   <option>All</option>
-                  <option>Electronics</option>
-                  <option>Documents</option>
+                  <option>Electronic Gadget</option>
                   <option>Accessories</option>
+                  <option>Documents</option>
                   <option>Others</option>
                 </select>
               </section>
@@ -1651,23 +1784,25 @@ export default function Home() {
                       <div style={{ 
                         marginTop: 10,
                         padding: '8px 12px',
-                        background: it.postType === 'found' ? '#22c55e' : '#ef4444',
+                        background: it.post_type === 'found' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                        border: `1px solid ${it.post_type === 'found' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
                         borderRadius: '8px',
                         fontSize: '0.85rem',
-                        color: '#fff',
+                        color: it.post_type === 'found' ? '#22c55e' : '#ef4444',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '8px'
                       }}>
                         <span style={{ fontSize: '1rem' }}>
-                          {it.postType === 'found' ? '✓' : '🔍'}
+                          {it.post_type === 'found' ? '✓' : '🔍'}
                         </span>
-                        {it.postType === 'found' ? 'Found Item - Anyone looking for this' : 'Lost Item - Owner looking for this'}
+                        <strong>{it.post_type === 'found' ? 'Found Item' : 'Lost Item'}</strong> - 
+                        {it.post_type === 'found' ? 'Anyone looking for this' : 'Owner looking for this'}
                       </div>
                       
                       <div style={{ marginTop: 8, fontSize: '0.8rem', opacity: 0.9 }}>
-                        <strong>{it.postType === 'found' ? 'Finder:' : 'Owner:'}</strong> {it.ownerName} • 
-                        <strong>{it.postType === 'found' ? 'Found at:' : 'Lost at:'}</strong> {it.ownerLocation}
+                        <strong>{it.post_type === 'found' ? 'Finder:' : 'Owner:'}</strong> {it.ownerName} • 
+                        <strong>{it.post_type === 'found' ? 'Found at:' : 'Lost at:'}</strong> {it.ownerLocation}
                       </div>
                       <div style={{ marginTop: 4, fontSize: '0.8rem', opacity: 0.9 }}>
                         📞 {it.ownerPhone || 'No phone provided'}
@@ -1699,7 +1834,7 @@ export default function Home() {
               )}
             </div>
           ) : view === 'explore' ? (
-            <ExploreSection userItems={missingItems} />
+            <ExploreSection userItems={missingItems} currentUser={user} />
           ) : view === 'notifications' ? (
             <NotificationsSection />
           ) : view === 'find' ? (
@@ -1819,12 +1954,29 @@ export default function Home() {
                 <p style={{ marginTop: 8, opacity: 0.95, lineHeight: 1.5 }}>
                   {modalItem.description || 'No description available.'}
                 </p>
+                {/* Post type badge */}
+                <div style={{ 
+                  marginTop: 10, 
+                  padding: '6px 10px', 
+                  background: modalItem.post_type === 'found' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                  border: `1px solid ${modalItem.post_type === 'found' ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, 
+                  borderRadius: '6px', 
+                  fontSize: 13,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '1rem' }}>
+                    {modalItem.post_type === 'found' ? '✓' : '🔍'}
+                  </span>
+                  <strong>{modalItem.post_type === 'found' ? 'Found Item' : 'Lost Item'}</strong>
+                </div>
                 <div style={{ marginTop: 10, fontSize: 14, opacity: 0.9 }}>
                   <div>Category: <strong>{modalItem.category || 'Not specified'}</strong></div>
-                  <div>Location: <strong>{modalItem.location || 'Not specified'}</strong></div>
+                  <div><strong>{modalItem.post_type === 'found' ? 'Found at:' : 'Lost at:'}</strong> <strong>{modalItem.location || 'Not specified'}</strong></div>
                   <div>Date: <strong>{modalItem.date || 'Not specified'}</strong></div>
                   {modalItem.ownerName && (
-                    <div>Owner: <strong>{modalItem.ownerName}</strong></div>
+                    <div><strong>{modalItem.post_type === 'found' ? 'Finder:' : 'Owner:'}</strong> <strong>{modalItem.ownerName}</strong></div>
                   )}
                   {modalItem.ownerPhone && (
                     <div>Contact: <strong>{modalItem.ownerPhone}</strong></div>

@@ -14,9 +14,9 @@ async function logAuthEvent(type, user) {
 }
 
 function SignupForm({ onShowLogin, onAuthSuccess }) {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '', mobile: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', phone: '' });
   const [showPasswordSetup, setShowPasswordSetup] = useState(false);
-  const [pwForm, setPwForm] = useState({ password: '', confirm: '', phone: '', mobile: '' });
+  const [pwForm, setPwForm] = useState({ password: '', confirm: '', phone: '' });
   const [googleUser, setGoogleUser] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
   const [errors, setErrors] = useState({});
@@ -39,9 +39,6 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
       if (!formData.phone) {
         newErrors.phone = 'Please enter a phone number';
       }
-      if (!formData.mobile) {
-        newErrors.mobile = 'Please enter a mobile number';
-      }
       if (Object.keys(newErrors).length > 0) {
         setErrors(newErrors);
         return;
@@ -55,7 +52,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
         await logAuthEvent('signup', cred.user);
         
         // Sync user data to SQL database
-        const response = await fetch('/api/auth/sync', {
+        const response = await fetch('http://localhost:3005/api/auth/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -66,7 +63,6 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
             email: formData.email,
             password: formData.password, // Note: This is only for SQL auth
             phone: formData.phone,
-            mobile: formData.mobile,
             isGoogleAuth: false
           }),
         });
@@ -115,7 +111,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
         } else {
           // Check if user exists in SQL database
           try {
-            const response = await fetch('/api/auth/sync', {
+            const response = await fetch('http://localhost:3005/api/auth/sync', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -172,7 +168,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
       await doLinkPasswordToGoogleAccount(googleUser, pwForm.password);
 
       // Sync user data with SQL database
-      const response = await fetch('/api/auth/sync', {
+      const response = await fetch('http://localhost:3005/api/auth/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -205,7 +201,14 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   };
 
   return (
-    <div style={{ position: 'relative' }}>
+    // scrollable outer wrapper (keeps logo fixed and allows card to scroll on small viewports)
+    <div className="signup-scroll-container" style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4rem 1.5rem' }}>
+      {/* Top-left site title */}
+      <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 50 }}>
+        <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, background: 'linear-gradient(90deg, #a78bfa, #f472b6)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>FindSync</h1>
+      </div>
+
+      <div style={{ position: 'relative' }}>
       {statusMsg && (
         <div
           style={{
@@ -269,7 +272,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="email">Email</label>
-              <input id="email" name="email" type="email" placeholder="m@example.com" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc' }} value={formData.email} onChange={handleChange} />
+              <input id="email" name="email" type="email" placeholder="Your email" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc' }} value={formData.email} onChange={handleChange} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="password">Password</label>
@@ -292,24 +295,6 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
                 onChange={handleChange} 
               />
               {errors.phone && <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{errors.phone}</span>}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              <label htmlFor="mobile">Mobile Number</label>
-              <input 
-                id="mobile" 
-                name="mobile" 
-                type="tel" 
-                placeholder="Enter your mobile number" 
-                required 
-                style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '6px', 
-                  border: errors.mobile ? '1px solid #ef4444' : '1px solid #ccc' 
-                }} 
-                value={formData.mobile} 
-                onChange={handleChange} 
-              />
-              {errors.mobile && <span style={{ color: '#ef4444', fontSize: '0.875rem' }}>{errors.mobile}</span>}
             </div>
             <button type="submit" style={{ padding: '0.75rem', borderRadius: '6px', background: '#222', color: 'white', fontWeight: 'bold', border: 'none', marginTop: '0.5rem' }}>Sign up</button>
           </div>
@@ -364,6 +349,7 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
         </div>
       </div>
     </div>
+  </div>
   );
 }
 

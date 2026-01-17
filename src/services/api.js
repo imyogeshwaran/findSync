@@ -1,10 +1,19 @@
+console.log('Loading API module');
 // Prefer Vite env at build-time, fallback to window env, then localhost
 // Prefer Vite env at build-time, fallback to window env, then proxy path
+console.log('API_URL configuration:', {
+  importMeta: typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL,
+  windowEnv: typeof window !== 'undefined' && window.__API_URL__,
+  default: 'http://localhost:3005/api'
+});
+
 const API_URL = (
   (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_URL) ||
   (typeof window !== 'undefined' && window.__API_URL__) ||
-  'http://localhost:5000/api'
+  'http://localhost:3005/api'
 );
+
+console.log('Using API_URL:', API_URL);
 // Store token in localStorage
 export const setAuthToken = (token) => {
   if (token) {
@@ -40,10 +49,17 @@ const apiRequest = async (url, options = {}) => {
       body: options.body ? JSON.parse(options.body) : undefined
     });
 
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     response = await fetch(`${API_URL}${url}`, {
       ...options,
       headers,
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
     console.log('API response:', {
       status: response.status,
@@ -52,6 +68,9 @@ const apiRequest = async (url, options = {}) => {
     });
   } catch (networkError) {
     console.error('Network error:', networkError);
+    if (networkError.name === 'AbortError') {
+      throw new Error('Request timeout. Is the backend running?');
+    }
     // Surface concise error for offline/dev without backend
     throw new Error('Cannot reach API. Is the backend running?');
   }
@@ -108,60 +127,102 @@ export const getUserProfile = async () => {
 export const createMissingItem = async (itemData) => {
   console.log('Creating missing item with data:', itemData);
   
-  // Validate required fields before making request
-  const requiredFields = ['item_name', 'location', 'phone'];
-  const missingFields = requiredFields.filter(field => !itemData[field]);
-  
-  if (missingFields.length > 0) {
-    console.error('Missing required fields:', missingFields);
-    throw new Error(`Required fields missing: ${missingFields.join(', ')}`);
+  const token = getAuthToken();
+  const headers = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await apiRequest('/items/missing', {
-    method: 'POST',
-    body: JSON.stringify(itemData),
-  });
+  // Check if itemData is FormData (for file uploads)
+  const isFormData = itemData instanceof FormData;
+  
+  if (!isFormData) {
+    // Validate required fields for non-FormData
+    const requiredFields = ['item_name', 'location', 'phone'];
+    const missingFields = requiredFields.filter(field => !itemData[field]);
+    
+    if (missingFields.length > 0) {
+      console.error('Missing required fields:', missingFields);
+      throw new Error(`Required fields missing: ${missingFields.join(', ')}`);
+    }
+    headers['Content-Type'] = 'application/json';
+  }
+
+  let response;
+  try {
+    console.log('Making API request to create item');
+
+    response = await fetch(`${API_URL}/items/missing`, {
+      method: 'POST',
+      headers,
+      body: isFormData ? itemData : JSON.stringify(itemData),
+    });
+
+    console.log('API response:', {
+      status: response.status,
+      statusText: response.statusText,
+    });
+  } catch (networkError) {
+    console.error('Network error:', networkError);
+    throw new Error('Cannot reach API. Is the backend running?');
+  }
+
+  const isJson = response.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await response.json().catch(() => ({})) : null;
+
+  if (!response.ok) {
+    const message = (data && (data.error || data.message)) || `${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
   
   // Transform response to match frontend expectations
-  if (response.item) {
+  if (data.item) {
     return {
-      ...response,
+      ...data,
       item: {
-        id: response.item.item_id,
-        name: response.item.item_name,
-        description: response.item.description,
-        location: response.item.location,
-        image_url: response.item.image_url,
-        category: response.item.category,
-        status: response.item.status,
-        post_type: response.item.post_type
+        id: data.item.item_id,
+        name: data.item.item_name,
+        description: data.item.description,
+        location: data.item.location,
+        image_url: data.item.image_url,
+        category: data.item.category,
+        status: data.item.status,
+        post_type: data.item.post_type
       }
     };
   }
-  return response;
+  return data;
 };
 
 export const getAllMissingItems = async () => {
-  const response = await apiRequest('/items/missing');
-  // Transform the response to match frontend expectations
-  if (response.items) {
-    return {
-      items: response.items.map(item => ({
-        id: item.item_id,
-        name: item.item_name,
-        description: item.description,
-        location: item.location,
-        created_at: item.posted_at,
-        image_url: item.image_url,
-        owner_name: item.owner_name,
-        phone: item.owner_phone,
-        category: item.category,
-        status: item.status,
-        post_type: item.post_type
-      }))
-    };
+  console.log('getAllMissingItems called');
+  try {
+    const response = await apiRequest('/items/missing');
+    console.log('getAllMissingItems response:', response);
+    // Transform the response to match frontend expectations
+    if (response.items) {
+      return {
+        items: response.items.map(item => ({
+          id: item.id,
+          name: item.title,
+          description: item.description,
+          location: item.location,
+          created_at: item.date,
+          image_url: item.image,
+          owner_name: item.ownerName,
+          phone: item.ownerPhone,
+          category: item.category,
+          status: item.status,
+          post_type: item.post_type
+        }))
+      };
+    }
+    return response;
+  } catch (error) {
+    console.error('getAllMissingItems error:', error);
+    throw error;
   }
-  return response;
 };
 
 export const getUserMissingItems = async () => {
@@ -195,4 +256,21 @@ export const createContact = async (payload) => {
 
 export const getNotifications = async () => {
   return apiRequest('/contacts');
+};
+
+export const getNotificationCount = async () => {
+  return apiRequest('/contacts/count');
+};
+
+export const getUserConversations = async () => {
+  return apiRequest('/contacts/conversations');
+};
+
+export const getConversationHistory = async (otherUserId, itemId) => {
+  return apiRequest(`/contacts/history?otherUserId=${otherUserId}&itemId=${itemId}`);
+};
+
+// Fix post types endpoint
+export const fixPostTypes = async () => {
+  return apiRequest('/items/fix-post-types');
 };

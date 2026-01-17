@@ -15,9 +15,10 @@ async function logAuthEvent(type, user) {
   });
 }
 
-function SigninForm({ onShowSignup, onAuthSuccess }) {
+function SigninForm({ onShowSignup, onAuthSuccess, onAdminLogin }) {
   const [formData, setFormData] = React.useState({ email: '', password: '' });
   const [successMsg, setSuccessMsg] = React.useState('');
+  const [isAdminLogin, setIsAdminLogin] = React.useState(false);
 
   React.useEffect(() => {
     if (!successMsg) return;
@@ -28,11 +29,36 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const result = await doSignInWithEmailAndPassword(formData.email, formData.password);
-      await logAuthEvent('login', result.user);
-      setSuccessMsg('Login successful!');
-      if (onAuthSuccess) onAuthSuccess(result.user);
-      // Redirect or update UI as needed
+      if (isAdminLogin) {
+        // Admin login
+        const response = await fetch('http://localhost:3005/api/admin/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Admin login failed');
+        }
+
+        const data = await response.json();
+        localStorage.setItem('adminToken', data.token);
+        localStorage.setItem('adminEmail', data.admin.email);
+        setSuccessMsg('Admin login successful!');
+        if (onAdminLogin) onAdminLogin(data.admin);
+      } else {
+        // Regular user login
+        const result = await doSignInWithEmailAndPassword(formData.email, formData.password);
+        await logAuthEvent('login', result.user);
+        setSuccessMsg('Login successful!');
+        if (onAuthSuccess) onAuthSuccess(result.user);
+      }
     } catch (error) {
       alert(error.message);
       console.error(error);
@@ -71,18 +97,26 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
     });
   };
 
+  // scrollable outer wrapper (keeps logo fixed and allows card to scroll on small viewports)
   return (
-    <div style={{
-      position: 'relative',
-      backgroundColor: 'rgba(255, 255, 255, 0.1)',
-      backdropFilter: 'blur(10px)',
-      padding: '2.5rem',
-      borderRadius: '12px',
-      boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      width: '400px',
-      color: 'white'
-    }}>
+    <div className="signup-scroll-container" style={{ position: 'relative', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '4rem 1.5rem' }}>
+      {/* Top-left site title */}
+      <div style={{ position: 'absolute', top: 24, left: 24, zIndex: 50 }}>
+        <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, background: 'linear-gradient(90deg, #a78bfa, #f472b6)', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>FindSync</h1>
+      </div>
+
+      <div style={{
+        position: 'relative',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backdropFilter: 'blur(10px)',
+        padding: '2.5rem',
+        borderRadius: '12px',
+        boxShadow: '0 4px 30px rgba(0, 0, 0, 0.1)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        width: '100%',
+        maxWidth: '400px',
+        color: 'white'
+      }}>
       {successMsg && (
         <div
           style={{
@@ -137,11 +171,25 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
       )}
       <div style={{ marginBottom: '1.5rem' }}>
         <h1 style={{ fontSize: '1.875rem', fontWeight: '600', color: 'white', marginBottom: '0.5rem' }}>
-          Login to your account
+          {isAdminLogin ? 'Admin Login' : 'Login to your account'}
         </h1>
         <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.875rem' }}>
-          Enter your email below to login to your account
+          {isAdminLogin ? 'Enter your admin credentials' : 'Enter your email below to login to your account'}
         </p>
+      </div>
+      
+      {/* Admin Login Toggle */}
+      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <input
+          type="checkbox"
+          id="adminToggle"
+          checked={isAdminLogin}
+          onChange={(e) => setIsAdminLogin(e.target.checked)}
+          style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+        />
+        <label htmlFor="adminToggle" style={{ color: 'rgba(255, 255, 255, 0.8)', cursor: 'pointer', fontSize: '0.875rem' }}>
+          Admin Login
+        </label>
       </div>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div>
@@ -154,7 +202,7 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
             name="email"
             value={formData.email}
             onChange={handleChange}
-            placeholder="xyz@example.com"
+            placeholder="Your email"
             style={{ width: '100%', padding: '0.75rem', backgroundColor: 'white', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.875rem', color: '#000000ff' }}
           />
         </div>
@@ -182,24 +230,29 @@ function SigninForm({ onShowSignup, onAuthSuccess }) {
         >
           Login
         </button>
-        <button
-          type="button"
-          onClick={handleGoogleLogin}
-          style={{ padding: '0.75rem', backgroundColor: 'white', color: '#000000ff', border: '1px solid #D1D5DB', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
-        >
-          <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>
-          </svg>
-          Login with Google
-        </button>
-        <p style={{ textAlign: 'center', fontSize: '0.875rem', color: '#ffffffff' }}>
-          Don't have an account?{' '}
-          <a href="#" style={{ color: '#00fff7ff', textDecoration: 'none', fontWeight: '500' }} onClick={e => { e.preventDefault(); if (onShowSignup) onShowSignup(); }}>
-            Sign up
-          </a>
-        </p>
+        {!isAdminLogin && (
+          <>
+            <button
+              type="button"
+              onClick={handleGoogleLogin}
+              style={{ padding: '0.75rem', backgroundColor: 'white', color: '#000000ff', border: '1px solid #D1D5DB', borderRadius: '6px', cursor: 'pointer', fontSize: '0.875rem', fontWeight: '500', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+            >
+              <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>
+              </svg>
+              Login with Google
+            </button>
+            <p style={{ textAlign: 'center', fontSize: '0.875rem', color: '#ffffffff' }}>
+              Don't have an account?{' '}
+              <a href="#" style={{ color: '#00fff7ff', textDecoration: 'none', fontWeight: '500' }} onClick={e => { e.preventDefault(); if (onShowSignup) onShowSignup(); }}>
+                Sign up
+              </a>
+            </p>
+          </>
+        )}
       </form>
     </div>
+  </div>
   );
 }
 

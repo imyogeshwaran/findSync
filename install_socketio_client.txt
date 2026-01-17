@@ -1,5 +1,0 @@
-Run this command in your project root to install the Socket.IO client for React:
-
-npm install socket.io-client
-
-After installing, you can import and use it in your React components to receive real-time updates.
