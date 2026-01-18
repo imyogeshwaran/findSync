@@ -1113,11 +1113,22 @@ function ExploreSection({ userItems = [], currentUser = null }) {
               borderRadius: 14,
               overflow: 'hidden',
               boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
-              transition: 'transform 300ms ease, box-shadow 300ms ease',
+              transition: 'all 300ms ease',
               animation: 'fadeUp 500ms ease both',
               animationDelay: `${idx * 60}ms`,
+              cursor: 'pointer',
             }}
             className="lost-card"
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+              e.currentTarget.style.boxShadow = '0 12px 35px rgba(79,70,229,0.35)';
+              e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0) scale(1)';
+              e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.18)';
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+            }}
           >
             <div style={{ width: '100%', height: 180, overflow: 'hidden', background: '#111' }}>
               <img src={it.image} alt={it.title} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
@@ -1188,12 +1199,12 @@ function ExploreSection({ userItems = [], currentUser = null }) {
                 </button>
                 <div style={{ flex: 1 }}>
                   {notifyOpenId === it.id ? (
-                    <div style={{ display: 'flex', gap: 8 }}>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                       <input
                         value={notifyMessage}
                         onChange={(e) => setNotifyMessage(e.target.value)}
                         placeholder="Write a message to the owner..."
-                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.35)', color: '#fff' }}
+                        style={{ flex: '1 1 auto', minWidth: '120px', padding: '8px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.35)', color: '#fff' }}
                       />
                       <button
                         onClick={async () => {
@@ -1226,7 +1237,7 @@ function ExploreSection({ userItems = [], currentUser = null }) {
                             setSendingNotify(false);
                           }
                         }}
-                        style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4f46e5,#a855f7)', color: '#fff', cursor: 'pointer' }}
+                        style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg,#4f46e5,#a855f7)', color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
                         disabled={sendingNotify}
                       >
                         Send
