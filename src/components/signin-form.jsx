@@ -3,6 +3,7 @@ import { doSignInWithEmailAndPassword, doSignInWithGoogle } from '../firebase/au
 import { auth } from '../firebase/firebase';
 import { getFirestore, collection, addDoc } from 'firebase/firestore';
 import {useAuth} from '../firebase/Acindex.jsx';
+import GoogleAuthModal from './GoogleAuthModal';
 
 const db = getFirestore();
 
@@ -19,6 +20,9 @@ function SigninForm({ onShowSignup, onAuthSuccess, onAdminLogin }) {
   const [formData, setFormData] = React.useState({ email: '', password: '' });
   const [successMsg, setSuccessMsg] = React.useState('');
   const [isAdminLogin, setIsAdminLogin] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [showGoogleModal, setShowGoogleModal] = React.useState(false);
+  const [googleUser, setGoogleUser] = React.useState(null);
 
   React.useEffect(() => {
     if (!successMsg) return;
@@ -69,11 +73,87 @@ function SigninForm({ onShowSignup, onAuthSuccess, onAdminLogin }) {
     try {
       const result = await doSignInWithGoogle();
       const user = result?.user || result;
+      const isNewUser = result?.isNewUser ?? true;
+      
       if (user) {
-        await logAuthEvent('login', user);
-        setSuccessMsg('Google login successful!');
-        if (onAuthSuccess) onAuthSuccess(user);
+        if (isNewUser) {
+          // For new users, show modal to collect password and phone
+          setGoogleUser(user);
+          setShowGoogleModal(true);
+        } else {
+          // For existing users, complete login directly
+          await logAuthEvent('login', user);
+          
+          // Sync existing user
+          try {
+            const response = await fetch('http://localhost:3005/api/auth/sync', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                firebase_uid: user.uid,
+                name: user.displayName,
+                email: user.email,
+                isGoogleAuth: true
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to sync user data');
+            }
+
+            const data = await response.json();
+            localStorage.setItem('token', data.token);
+          } catch (syncError) {
+            console.error('Error syncing user:', syncError);
+          }
+
+          setSuccessMsg('Google login successful!');
+          if (onAuthSuccess) onAuthSuccess(user);
+        }
       }
+    } catch (error) {
+      alert(error.message);
+      console.error(error);
+    }
+  };
+
+  const handleGoogleModalSubmit = async (formData) => {
+    if (!googleUser) return;
+    
+    try {
+      // Link password to Google account
+      const { doLinkPasswordToGoogleAccount } = await import('../firebase/auth');
+      await doLinkPasswordToGoogleAccount(googleUser, formData.password);
+
+      // Sync user data with SQL database
+      const response = await fetch('http://localhost:3005/api/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firebase_uid: googleUser.uid,
+          name: googleUser.displayName,
+          email: googleUser.email,
+          password: formData.password,
+          phone: formData.phone,
+          isGoogleAuth: true
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to sync user data with database');
+      }
+
+      const data = await response.json();
+      localStorage.setItem('token', data.token);
+
+      setSuccessMsg('Google signup successful!');
+      setShowGoogleModal(false);
+      setGoogleUser(null);
+      if (onAuthSuccess) onAuthSuccess(googleUser);
     } catch (error) {
       alert(error.message);
       console.error(error);
@@ -215,14 +295,24 @@ function SigninForm({ onShowSignup, onAuthSuccess, onAdminLogin }) {
               Forgot your password?
             </a>
           </div>
-          <input
-            id="password"
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '0.75rem', backgroundColor: 'white', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.875rem', color: '#101010ff' }}
-          />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '0.75rem', paddingRight: '2.5rem', backgroundColor: 'white', border: '1px solid #D1D5DB', borderRadius: '6px', fontSize: '0.875rem', color: '#101010ff' }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{ position: 'absolute', right: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1.2rem', padding: 0 }}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? '👁️' : '👁️‍🗨️'}
+            </button>
+          </div>
         </div>
         <button
           type="submit"
@@ -251,6 +341,7 @@ function SigninForm({ onShowSignup, onAuthSuccess, onAdminLogin }) {
           </>
         )}
       </form>
+      <GoogleAuthModal isOpen={showGoogleModal} onClose={() => setShowGoogleModal(false)} onSubmit={handleGoogleModalSubmit} />
     </div>
   </div>
   );

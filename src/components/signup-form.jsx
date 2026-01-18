@@ -20,6 +20,10 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
   const [googleUser, setGoogleUser] = useState(null);
   const [statusMsg, setStatusMsg] = useState('');
   const [errors, setErrors] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showSetupPassword, setShowSetupPassword] = useState(false);
+  const [showSetupConfirmPassword, setShowSetupConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (!statusMsg) return;
@@ -276,7 +280,12 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="password">Password</label>
-              <input id="password" name="password" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #ccc' }} value={formData.password} onChange={handleChange} />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input id="password" name="password" type={showPassword ? 'text' : 'password'} required style={{ padding: '0.75rem', paddingRight: '2.5rem', borderRadius: '6px', border: '1px solid #ccc', width: '100%' }} value={formData.password} onChange={handleChange} />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ position: 'absolute', right: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1.2rem', padding: 0 }} title={showPassword ? 'Hide password' : 'Show password'}>
+                  {showPassword ? '👁️' : '👁️‍🗨️'}
+                </button>
+              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <label htmlFor="phone">Phone Number</label>
@@ -323,11 +332,21 @@ function SignupForm({ onShowLogin, onAuthSuccess }) {
             <form onSubmit={handleLinkPassword} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label htmlFor="newPassword">Password</label>
-                <input id="newPassword" name="newPassword" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010' }} value={pwForm.password} onChange={(e) => setPwForm({ ...pwForm, password: e.target.value })} />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input id="newPassword" name="newPassword" type={showSetupPassword ? 'text' : 'password'} required style={{ padding: '0.75rem', paddingRight: '2.5rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010', width: '100%' }} value={pwForm.password} onChange={(e) => setPwForm({ ...pwForm, password: e.target.value })} />
+                  <button type="button" onClick={() => setShowSetupPassword(!showSetupPassword)} style={{ position: 'absolute', right: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1.2rem', padding: 0 }} title={showSetupPassword ? 'Hide password' : 'Show password'}>
+                    {showSetupPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label htmlFor="confirmPassword">Confirm Password</label>
-                <input id="confirmPassword" name="confirmPassword" type="password" required style={{ padding: '0.75rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010' }} value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input id="confirmPassword" name="confirmPassword" type={showSetupConfirmPassword ? 'text' : 'password'} required style={{ padding: '0.75rem', paddingRight: '2.5rem', borderRadius: '6px', border: '1px solid #D1D5DB', color: '#101010', width: '100%' }} value={pwForm.confirm} onChange={(e) => setPwForm({ ...pwForm, confirm: e.target.value })} />
+                  <button type="button" onClick={() => setShowSetupConfirmPassword(!showSetupConfirmPassword)} style={{ position: 'absolute', right: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '1.2rem', padding: 0 }} title={showSetupConfirmPassword ? 'Hide password' : 'Show password'}>
+                    {showSetupConfirmPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <label htmlFor="phone">Phone Number</label>

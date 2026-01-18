@@ -5,6 +5,7 @@ import NotificationBellIcon from '../assets/NotificationBell.svg';
 import { auth } from '../firebase/firebase.js';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, onAuthStateChanged, signOut } from 'firebase/auth';
 import { syncUserToBackend, createMissingItem, getAllMissingItems, setAuthToken, fixPostTypes, createContact, getNotifications, getUserProfile, getAuthToken, getNotificationCount } from '../services/api.js';
+import MobileNumberModal from './MobileNumberModal';
 
 // Helper function to format date as DD/MMM/YYYY HH:MM
 const formatDateTime = (dateString) => {
@@ -1453,6 +1454,7 @@ export default function Home() {
   const [userItems, setUserItems] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMobileModal, setShowMobileModal] = useState(false);
   const [modalItem, setModalItem] = useState(null);
   
   // Add debugging for view changes
@@ -1520,9 +1522,20 @@ export default function Home() {
           const mergedUser = await syncUserToBackend(currentUser);
           setUser(mergedUser);
           console.log('✅ User synced on auth state change');
+          
+          // Check if mobile number is missing
+          if (!mergedUser.mobile || mergedUser.mobile === null || mergedUser.mobile === '') {
+            console.log('📱 Mobile number is missing, showing modal');
+            setShowMobileModal(true);
+          }
         } catch (error) {
           setUser(currentUser); // fallback to Firebase user
           console.error('Failed to sync user:', error);
+          
+          // If we have a fallback user without mobile, show the modal
+          if (!currentUser.phoneNumber) {
+            setShowMobileModal(true);
+          }
         }
       } else {
         // No firebase user — but there may be a backend JWT (email/password login flow).
@@ -1532,6 +1545,12 @@ export default function Home() {
             const profileRes = await getUserProfile();
             if (profileRes && profileRes.user) {
               setUser(profileRes.user);
+              
+              // Check if mobile number is missing
+              if (!profileRes.user.mobile || profileRes.user.mobile === null || profileRes.user.mobile === '') {
+                console.log('📱 Mobile number is missing, showing modal');
+                setShowMobileModal(true);
+              }
             } else {
               setUser(null);
               setAuthToken(null);
@@ -1561,6 +1580,60 @@ export default function Home() {
       setView('explore');
     } catch (error) {
       console.error('Logout error:', error);
+    }
+  };
+
+  // Handle mobile number submission
+  const handleMobileNumberSubmit = async (mobileNumber) => {
+    try {
+      console.log('📱 Submitting mobile number:', mobileNumber);
+      console.log('🔐 Auth token:', getAuthToken() ? 'Present' : 'Missing');
+      
+      const response = await fetch('http://localhost:3005/api/users/update-mobile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
+        body: JSON.stringify({
+          mobile: mobileNumber
+        }),
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to update mobile number';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (jsonErr) {
+          console.error('Could not parse error response:', jsonErr);
+          // Try to get text response if JSON parsing fails
+          try {
+            const textResponse = await response.text();
+            console.error('Server response text:', textResponse);
+          } catch (textErr) {
+            console.error('Could not read response text:', textErr);
+          }
+        }
+        throw new Error(errorMessage);
+      }
+
+      const data = await response.json();
+      console.log('✅ Server response:', data);
+      
+      // Update user state with new mobile number
+      setUser(prev => ({
+        ...prev,
+        mobile: mobileNumber
+      }));
+      
+      setShowMobileModal(false);
+      console.log('✅ Mobile number updated successfully');
+    } catch (error) {
+      console.error('❌ Error updating mobile number:', error);
+      alert('Failed to update mobile number: ' + error.message);
     }
   };
 
@@ -2059,6 +2132,13 @@ export default function Home() {
         isOpen={showAuthModal} 
         onClose={() => setShowAuthModal(false)} 
         onAuthSuccess={() => setShowAuthModal(false)} 
+      />
+
+      {/* Mobile Number Modal */}
+      <MobileNumberModal
+        isOpen={showMobileModal}
+        onClose={() => setShowMobileModal(false)}
+        onSubmit={handleMobileNumberSubmit}
       />
 
       {/* Floating Action Button - Show on all pages except Find */}

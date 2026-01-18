@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 
 export default function GoogleAuthModal({ isOpen, onClose, onSubmit }) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = React.useState({
     phone: '',
     password: ''
   });
+  const [showPassword, setShowPassword] = React.useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -92,25 +93,45 @@ export default function GoogleAuthModal({ isOpen, onClose, onSubmit }) {
             }}>
               Password
             </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength="6"
-              style={{
-                width: '100%',
-                padding: '12px 16px',
-                borderRadius: '10px',
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(0,0,0,0.35)',
-                color: '#fff',
-                fontSize: '1rem',
-                outline: 'none',
-              }}
-              placeholder="Create a password"
-            />
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                minLength="6"
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(0,0,0,0.35)',
+                  color: '#fff',
+                  fontSize: '1rem',
+                  outline: 'none',
+                  paddingRight: '45px',
+                }}
+                placeholder="Create a password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#999',
+                  cursor: 'pointer',
+                  fontSize: '1.2rem',
+                  padding: 0,
+                }}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '👁️' : '👁️‍🗨️'}
+              </button>
+            </div>
           </div>
 
           <button

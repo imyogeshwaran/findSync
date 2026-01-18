@@ -13,6 +13,7 @@ import { Label } from '../components/ui/label';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { setAuthToken } from '../services/api';
 import GoogleAuthModal from './GoogleAuthModal';
+import MobileNumberModal from './MobileNumberModal';
 
 const auth = getAuth();
 const provider = new GoogleAuthProvider();
@@ -21,7 +22,9 @@ export function LoginForm({
   className,
   ...props
 }) {
+  const [showPassword, setShowPassword] = useState(false);
   const [showGoogleModal, setShowGoogleModal] = useState(false);
+  const [showMobileModal, setShowMobileModal] = useState(false);
   const [googleUser, setGoogleUser] = useState(null);
 
   const handleGoogleAuth = async () => {
@@ -46,7 +49,7 @@ export function LoginForm({
       const { phone, password } = additionalData;
       
       // Send all user data to backend
-      const response = await fetch('/api/auth/sync', {
+      const response = await fetch('http://localhost:3005/api/auth/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,13 +68,52 @@ export function LoginForm({
         throw new Error('Failed to sync user data');
       }
 
+      const data = await response.json();
+      
+      // Store the token
+      setAuthToken(data.token);
+      
       // Close modal and proceed with login
       setShowGoogleModal(false);
       // Handle successful login (redirect or update UI)
       window.location.href = '/home';
     } catch (error) {
-      console.error('Error completing Google signup:', error);
-      alert('Failed to complete signup: ' + error.message);
+      console.error('Error completing Google signin:', error);
+      alert('Failed to complete signin: ' + error.message);
+    }
+  };
+
+  const handleMobileModalSubmit = async (mobileNumber) => {
+    try {
+      // Update user mobile number in database
+      const response = await fetch('http://localhost:3005/api/users/update-mobile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          mobile: mobileNumber
+        }),
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to update mobile number';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (jsonErr) {
+          console.error('Could not parse error response:', jsonErr);
+        }
+        throw new Error(errorMessage);
+      }
+
+      setShowMobileModal(false);
+      // Proceed with login
+      window.location.href = '/home';
+    } catch (error) {
+      console.error('Error updating mobile number:', error);
+      alert('Failed to update mobile number: ' + error.message);
     }
   };
 
@@ -91,7 +133,7 @@ export function LoginForm({
       }
 
       // Send login request to backend
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('http://localhost:3005/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -164,13 +206,23 @@ export function LoginForm({
                     Forgot your password?
                   </a>
                 </div>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autocomplete="current-password"
-                  required
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
               </div>
               <div className="flex flex-col gap-3">
                 <Button type="submit" className="w-full">
@@ -187,6 +239,15 @@ export function LoginForm({
                   isOpen={showGoogleModal}
                   onClose={() => setShowGoogleModal(false)}
                   onSubmit={handleGoogleModalSubmit}
+                />
+              )}
+
+              {/* Mobile Number Modal */}
+              {showMobileModal && (
+                <MobileNumberModal
+                  isOpen={showMobileModal}
+                  onClose={() => setShowMobileModal(false)}
+                  onSubmit={handleMobileModalSubmit}
                 />
               )}
             </div>
