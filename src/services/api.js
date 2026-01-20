@@ -23,6 +23,70 @@ export const setAuthToken = (token) => {
   }
 };
 
+// Get admin token from localStorage
+export const getAdminToken = () => {
+  return localStorage.getItem('adminToken');
+};
+
+// API request helper for admin endpoints
+const adminApiRequest = async (url, options = {}) => {
+  const token = getAdminToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  } else {
+    throw new Error('Admin token not found. Please login as admin first.');
+  }
+
+  let response;
+  try {
+    console.log('Making admin API request:', {
+      url: `${API_URL}${url}`,
+      method: options.method || 'GET',
+      headers: { ...headers, Authorization: headers.Authorization ? 'Bearer [token]' : 'none' },
+      body: options.body ? JSON.parse(options.body) : undefined
+    });
+
+    // Add timeout to fetch request
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
+    response = await fetch(`${API_URL}${url}`, {
+      ...options,
+      headers,
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+
+    console.log('Admin API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries())
+    });
+  } catch (networkError) {
+    console.error('Network error:', networkError);
+    if (networkError.name === 'AbortError') {
+      throw new Error('Request timeout. Is the backend running?');
+    }
+    throw new Error('Cannot reach API. Is the backend running?');
+  }
+
+  const isJson = response.headers.get('content-type')?.includes('application/json');
+  const data = isJson ? await response.json().catch(() => ({})) : null;
+
+  if (!response.ok) {
+    const message = (data && (data.error || data.message)) || `${response.status} ${response.statusText}`;
+    throw new Error(message);
+  }
+
+  return data;
+};
+
 // Get token from localStorage
 export const getAuthToken = () => {
   return localStorage.getItem('authToken');
@@ -268,6 +332,46 @@ export const getUserConversations = async () => {
 
 export const getConversationHistory = async (otherUserId, itemId) => {
   return apiRequest(`/contacts/history?otherUserId=${otherUserId}&itemId=${itemId}`);
+};
+
+// Chat/Message APIs
+export const getChatHistory = async (contactId) => {
+  return apiRequest(`/chats/${contactId}`);
+};
+
+export const sendChatMessage = async (contactId, message) => {
+  return apiRequest(`/chats/${contactId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message }),
+  });
+};
+
+export const editChatMessage = async (contactId, messageId, message) => {
+  return apiRequest(`/chats/${contactId}/messages/${messageId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ message }),
+  });
+};
+
+export const deleteChatMessage = async (contactId, messageId) => {
+  return apiRequest(`/chats/${contactId}/messages/${messageId}`, {
+    method: 'DELETE',
+  });
+};
+
+// Admin Conversation APIs
+export const getAdminConversations = async () => {
+  return adminApiRequest('/admin/conversations');
+};
+
+export const getAdminConversationMessages = async (contactId) => {
+  return adminApiRequest(`/admin/conversations/${contactId}/messages`);
+};
+
+export const adminDeleteMessage = async (contactId, messageId) => {
+  return adminApiRequest(`/admin/conversations/${contactId}/messages/${messageId}`, {
+    method: 'DELETE',
+  });
 };
 
 // Fix post types endpoint

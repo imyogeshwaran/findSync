@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Users, Package, BarChart3, Trash2, Eye, TrendingUp } from 'lucide-react';
+import { LogOut, Users, Package, BarChart3, Trash2, Eye, TrendingUp, MessageSquare } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import Threads from './Prism.jsx';
+import AdminConversations from './AdminConversations';
 
 // Helper function to format date as DD/MMM/YYYY
 const formatDate = (dateString) => {
@@ -427,6 +428,7 @@ function AdminDashboard({ onLogout }) {
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'users', label: 'Users', icon: Users },
             { id: 'items', label: 'Items', icon: Package },
+            { id: 'conversations', label: 'Conversations', icon: MessageSquare },
             { id: 'status', label: 'Status', icon: Eye },
             { id: 'analytics', label: 'Analytics', icon: TrendingUp }
           ].map(tab => {
@@ -1243,6 +1245,11 @@ function AdminDashboard({ onLogout }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Conversations Tab */}
+      {activeTab === 'conversations' && (
+        <AdminConversations />
       )}
       </div>
     </div>
